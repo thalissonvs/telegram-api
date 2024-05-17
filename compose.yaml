@@ -1,0 +1,9 @@
+services:
+  database:
+    image: postgres:16.0-alpine3.18
+    environment:
+      POSTGRES_DB: telegram_bot
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: mM91Ui1,d#p=
+    ports:
+      - "5432:5432"
