@@ -1,4 +1,4 @@
-import database from "../../../../infra/database";
+import database from "../../../infra/database";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { serialize } from "cookie";
@@ -6,6 +6,7 @@ import { serialize } from "cookie";
 const secret = process.env.SECRET;
 
 async function login(req, res) {
+  // define headers cors
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader(
     "Access-Control-Allow-Methods",
@@ -13,18 +14,10 @@ async function login(req, res) {
   );
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
-  const methodsMap = {
-    POST: postLogin,
-  };
-
-  if (methodsMap[req.method]) {
-    return methodsMap[req.method](req, res);
-  } else {
+  if (!req.method === "POST") {
     res.status(405).end();
+    return;
   }
-}
-
-async function postLogin(req, res) {
   const { email, password } = req.body;
 
   const getUserQuery = `
@@ -32,6 +25,7 @@ async function postLogin(req, res) {
     FROM users
     WHERE email = '${email}';
   `;
+
   const result = await database.query(getUserQuery);
   const user = result.rows[0];
 
@@ -56,14 +50,10 @@ async function postLogin(req, res) {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
-      maxAge: 60 * 60 * 24 * 7, // 1 semana
       path: "/",
     }),
   );
-
-  res
-    .status(200)
-    .json({ token: token, message: "Login realizado com sucesso" });
+  res.status(200).json({ message: "Login realizado com sucesso" });
 }
 
 export default login;

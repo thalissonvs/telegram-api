@@ -1,28 +1,12 @@
-import database from "../../../../infra/database";
-import jwt from "jsonwebtoken";
+import database from "../../../infra/database";
 
 async function quizzes(req, res) {
-  // Definindo os headers CORS
-  res.setHeader("Access-Control-Allow-Origin", "*"); // Permitir todas as origens
+  res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader(
     "Access-Control-Allow-Methods",
     "GET, POST, PUT, DELETE, OPTIONS",
-  ); // Métodos permitidos
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization"); // Cabeçalhos permitidos
-
-  // valida o token
-  const authorization = req.cookies.session;
-  if (!authorization) {
-    res.status(401).end();
-    return;
-  }
-
-  try {
-    jwt.verify(authorization, process.env.SECRET);
-  } catch (err) {
-    res.status(401).end();
-    return;
-  }
+  );
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
   const methodsMap = {
     DELETE: deleteQuiz,

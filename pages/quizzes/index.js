@@ -1,33 +1,17 @@
 import { useState, useEffect } from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
-import { requireAuth } from "../../utils/authMiddleware";
 
-export async function getServerSideProps(context) {
-  const props = requireAuth(context.req, context.res);
-  if (!props) {
-    return {
-      redirect: {
-        destination: "/login",
-        permanent: false,
-      },
-    };
-  }
-  return props;
-}
-
-const QuizzesPage = (user) => {
+const QuizzesPage = () => {
   const [quizzes, setQuizzes] = useState([]);
 
   useEffect(() => {
     try {
       fetch("/api/v1/quizzes")
-        .then((response) => response.json())
-        .then((data) => {
-          console.log(data);
-          setQuizzes(data);
+        .then((response) => {
+          return response.json();
         })
-        .catch((error) => {
-          console.error("Error fetching quizzes:", error);
+        .then((data) => {
+          setQuizzes(data);
         });
     } catch (error) {
       console.error("Error fetching quizzes:", error);

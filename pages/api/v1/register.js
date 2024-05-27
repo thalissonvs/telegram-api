@@ -1,4 +1,4 @@
-import database from "../../../../infra/database";
+import database from "../../../infra/database";
 import bcrypt from "bcryptjs";
 
 async function register(req, res) {

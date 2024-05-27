@@ -1,25 +1,19 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
 import { useRouter } from "next/router";
-import { requireAuth } from "../../utils/authMiddleware";
-
-export async function getServerSideProps(context) {
-  const props = requireAuth(context.req, context.res);
-  if (props) {
-    return {
-      redirect: {
-        destination: "/quizzes",
-        permanent: false,
-      },
-    };
-  }
-  return { props: {} };
-}
 
 const LoginPage = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const router = useRouter();
+
+  useEffect(() => {
+    fetch("/api/v1/verifyLogin").then((response) => {
+      if (response.status === 200) {
+        router.push("/quizzes");
+      }
+    });
+  }, []);
 
   const handleEmailChange = (e) => {
     setEmail(e.target.value);
