@@ -35,6 +35,20 @@ async function getQuizzes(req, res) {
 }
 
 async function postQuizzes(req, res) {
+  const question = req.body.question;
+  // verifica se a pergunta já existe
+  const questionExistsResponse = await database.query(`
+    SELECT question
+    FROM quizzes
+    WHERE question = '${question}';
+  `);
+  const questionExists = questionExistsResponse.rowCount > 0;
+
+  if (questionExists) {
+    res.status(400).json({ error: "Question already exists" });
+    return;
+  }
+
   const postQuizzesQuery = `
     INSERT INTO quizzes (question, difficulty)
     VALUES ('${req.body.question}', ${req.body.difficulty})
