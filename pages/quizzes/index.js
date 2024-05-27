@@ -20,7 +20,7 @@ const QuizzesPage = (user) => {
 
   useEffect(() => {
     try {
-      fetch("/api/v1/quizzes")
+      fetch("/api/v1/quizzes", { headers: { authentication: user.token } })
         .then((response) => response.json())
         .then((data) => {
           setQuizzes(data);
