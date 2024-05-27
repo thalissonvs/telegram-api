@@ -20,9 +20,10 @@ const QuizzesPage = (user) => {
 
   useEffect(() => {
     try {
-      fetch("/api/v1/quizzes", { headers: { authentication: user.token } })
+      fetch("/api/v1/quizzes")
         .then((response) => response.json())
         .then((data) => {
+          console.log(data);
           setQuizzes(data);
         })
         .catch((error) => {

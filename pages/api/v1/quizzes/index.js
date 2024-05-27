@@ -10,17 +10,17 @@ async function quizzes(req, res) {
   ); // Métodos permitidos
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization"); // Cabeçalhos permitidos
 
-  // valida o token jwt
-  const token = req.headers.authorization;
-  if (!token) {
-    res.status(401).json({ message: "Token não encontrado" });
+  // valida o token
+  const authorization = req.cookies.session;
+  if (!authorization) {
+    res.status(401).end();
     return;
   }
 
   try {
-    jwt.verify(token, process.env.SECRET);
+    jwt.verify(authorization, process.env.SECRET);
   } catch (err) {
-    res.status(401).json({ message: "Token inválido" });
+    res.status(401).end();
     return;
   }
 
