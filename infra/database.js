@@ -12,6 +12,7 @@ function getClient() {
 }
 
 async function query(queryObject) {
+  checkTables();
   const client = getClient();
   await client.connect();
   const result = await client.query(queryObject);
@@ -159,8 +160,6 @@ async function checkTables() {
     await client.end();
   }
 }
-
-checkTables();
 
 export default {
   query: query,
