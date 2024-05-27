@@ -91,41 +91,43 @@ const QuizzesPage = () => {
   return (
     <div className="container mt-5">
       <h2>Quizzes</h2>
-      <table className="table table-bordered mt-3">
-        <thead>
-          <tr>
-            <th>Pergunta</th>
-            <th>Opção A</th>
-            <th>Opção B</th>
-            <th>Opção C</th>
-            <th>Opção D</th>
-            <th>Dificuldade</th>
-            <th>Resposta Correta</th>
-            <th>Ações</th>
-          </tr>
-        </thead>
-        <tbody>
-          {quizzes.map((quiz, index) => (
-            <tr key={index}>
-              <td>{quiz.question}</td>
-              <td>{quiz.optionA}</td>
-              <td>{quiz.optionB}</td>
-              <td>{quiz.optionC}</td>
-              <td>{quiz.optionD}</td>
-              <td>{quiz.difficulty}</td>
-              <td>{quiz.correctOption}</td>
-              <td>
-                <button
-                  className="btn btn-danger"
-                  onClick={() => handleDelete(index)}
-                >
-                  Excluir
-                </button>
-              </td>
+      <div className="table-responsive mt-3">
+        <table className="table table-bordered">
+          <thead>
+            <tr>
+              <th>Pergunta</th>
+              <th>Opção A</th>
+              <th>Opção B</th>
+              <th>Opção C</th>
+              <th>Opção D</th>
+              <th>Dificuldade</th>
+              <th>Resposta Correta</th>
+              <th>Ações</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {quizzes.map((quiz, index) => (
+              <tr key={index}>
+                <td>{quiz.question}</td>
+                <td>{quiz.optionA}</td>
+                <td>{quiz.optionB}</td>
+                <td>{quiz.optionC}</td>
+                <td>{quiz.optionD}</td>
+                <td>{quiz.difficulty}</td>
+                <td>{quiz.correctOption}</td>
+                <td>
+                  <button
+                    className="btn btn-danger"
+                    onClick={() => handleDelete(index)}
+                  >
+                    Excluir
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       <form style={{ display: "none" }} id="newquiz" onSubmit={handleAddQuiz}>
         <h2>Novo Quiz</h2>
         <div className="mb-3">
@@ -135,13 +137,13 @@ const QuizzesPage = () => {
           <input type="text" className="form-control" id="question" />
         </div>
         <div className="row mb-3">
-          <div className="col">
+          <div className="col-md-6 col-sm-12">
             <label htmlFor="optionA" className="form-label">
               Opção A:
             </label>
             <input type="text" className="form-control" id="optionA" />
           </div>
-          <div className="col">
+          <div className="col-md-6 col-sm-12">
             <label htmlFor="optionB" className="form-label">
               Opção B:
             </label>
@@ -149,13 +151,13 @@ const QuizzesPage = () => {
           </div>
         </div>
         <div className="row mb-3">
-          <div className="col">
+          <div className="col-md-6 col-sm-12">
             <label htmlFor="optionC" className="form-label">
               Opção C:
             </label>
             <input type="text" className="form-control" id="optionC" />
           </div>
-          <div className="col">
+          <div className="col-md-6 col-sm-12">
             <label htmlFor="optionD" className="form-label">
               Opção D:
             </label>
@@ -163,7 +165,7 @@ const QuizzesPage = () => {
           </div>
         </div>
         <div className="row mb-3">
-          <div className="col">
+          <div className="col-md-6 col-sm-12">
             <label htmlFor="difficulty" className="form-label">
               Dificuldade:
             </label>
@@ -173,7 +175,7 @@ const QuizzesPage = () => {
               <option value="3">3 (Difícil)</option>
             </select>
           </div>
-          <div className="col">
+          <div className="col-md-6 col-sm-12">
             <label htmlFor="correctAnswer" className="form-label">
               Resposta Correta:
             </label>

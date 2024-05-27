@@ -43,7 +43,7 @@ const LoginPage = () => {
   return (
     <div className="d-flex justify-content-center align-items-center vh-100 bg-light">
       <form
-        className="w-25 p-5 bg-white border rounded"
+        className="w-75 w-sm-50 w-md-25 p-4 p-sm-5 bg-white border rounded"
         onSubmit={handleSubmit}
       >
         <h2 className="mb-4">Painel ADM</h2>
