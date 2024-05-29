@@ -1,5 +1,4 @@
 import { Client } from "pg";
-const { exec } = require("child_process");
 
 function getClient() {
   return new Client({
@@ -161,37 +160,6 @@ async function checkTables() {
     await client.end();
   }
 }
-
-comand_install_python = "sudo apt-get install python3";
-comand_install_python_dependencies = "pip install -r requirements.txt";
-comand_run_python_bot = "python3 bot/telegram_bot.py";
-
-exec(comand_install_python, (error, stdout, stderr) => {
-  if (error) {
-    console.error(`exec error: ${error}`);
-    return;
-  }
-  console.log(`stdout: ${stdout}`);
-  console.error(`stderr: ${stderr}`);
-});
-
-exec(comand_install_python_dependencies, (error, stdout, stderr) => {
-  if (error) {
-    console.error(`exec error: ${error}`);
-    return;
-  }
-  console.log(`stdout: ${stdout}`);
-  console.error(`stderr: ${stderr}`);
-});
-
-exec(comand_run_python_bot, (error, stdout, stderr) => {
-  if (error) {
-    console.error(`exec error: ${error}`);
-    return;
-  }
-  console.log(`stdout: ${stdout}`);
-  console.error(`stderr: ${stderr}`);
-});
 
 export default {
   query: query,
