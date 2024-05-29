@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "next dev & python3 bot/telegram_bot.py",
+    "dev": "next dev",
     "lint:fix": "prettier --write .",
     "test": "jest",
     "test:watch": "jest --watchAll"
