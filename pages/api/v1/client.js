@@ -125,6 +125,9 @@ async function updateClient(req, res) {
     return;
   }
 
+  console.log(balance);
+  console.log(current_client_data);
+
   const updateClientQuery = `
     UPDATE clients
     SET balance = ${balance || current_client_data.rows[0].balance},
