@@ -44,6 +44,31 @@ async function postClient(req, res) {
   const pix_key = req.body.pix_key;
   const balance = 0;
 
+  // valida se os dados não são nulos
+  if (!first_name || !email || !chat_id || !pix_type || !pix_key) {
+    res.status(400).json({ error: "Missing fields" });
+    return;
+  }
+
+  // verifica se o cliente já existe
+  const clientExistsResponse = await database.query(`
+    SELECT email
+    FROM clients
+    WHERE email = '${email}';
+  `);
+  const clientExists = clientExistsResponse.rowCount > 0;
+
+  if (clientExists) {
+    res.status(400).json({ error: "Client already exists" });
+    return;
+  }
+
+  const validTypes = ["CPF", "CNPJ", "Chave aleatória", "Email", "Telefone"];
+  if (!validTypes.includes(pix_type)) {
+    res.status(400).json({ error: "Invalid pix_type" });
+    return;
+  }
+
   const postClientQuery = `
     INSERT INTO clients (first_name, email, chat_id, pix_type, pix_key, balance)
     VALUES ('${first_name}', '${email}', ${chat_id}, '${pix_type}', '${pix_key}', ${balance})

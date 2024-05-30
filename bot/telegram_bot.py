@@ -68,25 +68,44 @@ reply_keyboard_return = InlineKeyboardMarkup(
 
 )
 
+reply_keyboard_change_pix_type = InlineKeyboardMarkup(
+    [
+        [InlineKeyboardButton("Mudar tipo de chave", callback_data="Mudar tipo de chave")],
+    ]
+
+)
+
 async def fetch(url: str) -> str:
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
-            return await response.json()
+  async with aiohttp.ClientSession() as session:
+    async with session.get(url) as response:
+      try:
+        return await response.json()
+      except:
+        return {"error": "Ocorreu um erro ao processar a requisição."}
 
 async def post(url: str, data: dict) -> str:
-    async with aiohttp.ClientSession() as session:
-        async with session.post(url, json=data) as response:
-            return await response.json()
+  async with aiohttp.ClientSession() as session:
+    async with session.post(url, json=data) as response:
+      try:
+        return await response.json()
+      except:
+        return {"error": "Ocorreu um erro ao processar a requisição."}
 
 async def put(url: str, data: dict) -> str:
-    async with aiohttp.ClientSession() as session:
-        async with session.put(url, json=data) as response:
-            return await response.json()
+  async with aiohttp.ClientSession() as session:
+    async with session.put(url, json=data) as response:
+      try:
+        return await response.json()
+      except:
+        return {"error": "Ocorreu um erro ao processar a requisição."}
 
 async def delete(url: str) -> str:
-    async with aiohttp.ClientSession() as session:
-        async with session.delete(url) as response:
-            return await response.json()
+  async with aiohttp.ClientSession() as session:
+    async with session.delete(url) as response:
+      try:
+        return await response.json()
+      except:
+        return {"error": "Ocorreu um erro ao processar a requisição."}
         
 async def get_user_data(chat_id: int) -> dict:
   url = f"https://quizmy.site/api/v1/client/?chat_id={chat_id}"
@@ -109,15 +128,8 @@ def validate_cpf(cpf: str) -> bool:
   # Validate CPF format
   if not re.match(r'\d{11}', cpf):
       return False
-  
-  # Basic CPF validation algorithm (simplified)
-  def calc_digit(digits):
-      total = sum(int(digit) * (index + 1) for index, digit in enumerate(digits))
-      return total % 11 % 10
-  
-  if calc_digit(cpf[:9]) == int(cpf[9]) and calc_digit(cpf[:10]) == int(cpf[10]):
-      return True
-  return False
+
+  return True
 
 def validate_cnpj(cnpj: str) -> bool:
   # Remove any non-numeric characters
@@ -131,15 +143,7 @@ def validate_cnpj(cnpj: str) -> bool:
   if not re.match(r'\d{14}', cnpj):
       return False
   
-  # Basic CNPJ validation algorithm (simplified)
-  def calc_digit(digits):
-      weights = [6, 7, 8, 9, 2, 3, 4, 5]
-      total = sum(int(digit) * weight for digit, weight in zip(digits[::-1], weights))
-      return total % 11 % 10
-  
-  if calc_digit(cnpj[:12]) == int(cnpj[12]) and calc_digit(cnpj[:13]) == int(cnpj[13]):
-      return True
-  return False
+  return True
 
 def validate_phone(phone: str) -> bool:
   # Remove any non-numeric characters
@@ -179,7 +183,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Inicia a conversa e solicita ao cliente o email"""
     first_name = update.message.from_user.first_name
     chat_id = update.message.chat_id
-    user_data = get_user_data(chat_id)
+    user_data = await get_user_data(chat_id)
 
     context.user_data["chat_id"] = chat_id
     context.user_data["first_name"] = first_name
@@ -202,13 +206,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 async def email(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Recebe o email do cliente"""
     email = update.message.text.strip()
-    
+
     if not validate_email(email):
       await update.message.reply_text(
           "Por favor, me informe um email válido."
       )
       return EMAIL
     
+    context.user_data["email"] = email
+
     await update.message.reply_text(
         f"Obrigado! Seu email é {email}, está correto?",
         reply_markup=reply_keyboard_confirm,
@@ -249,16 +255,26 @@ async def pix_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     await query.edit_message_text(
         f"Ótimo! Você escolheu o tipo {pix_type}. Agora insira a chave abaixo, incluindo pontos.",
+        reply_markup=reply_keyboard_change_pix_type,
     )
     return PIX
 
+async def show_pix_type_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text(
+        "Selecione um tipo de chave PIX abaixo.",
+        reply_markup=reply_keyboard_pix_type,
+    )
+    return PIX_TYPE
 
 async def pix(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     pix = update.message.text.strip()
     valid = validate_pix(pix, context.user_data["pix_type"])
     if not valid:
       await update.message.reply_text(
-          "Por favor, me informe uma chave PIX válida."
+          "Por favor, me informe uma chave PIX válida.",
+          reply_markup=reply_keyboard_change_pix_type,
       )
       return PIX
     
@@ -279,19 +295,18 @@ async def confirm_pix(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     if answer == "Sim":
         await query.edit_message_text(
             "Ótimo! Aguarde enquanto seu cadastro é feito...",
-            reply_markup=reply_keyboard_menu,
         )
         data = {
             "chat_id": context.user_data["chat_id"],
             "first_name": context.user_data["first_name"],
             "email": context.user_data["email"],
             "pix_type": context.user_data["pix_type"],
-            "pix": context.user_data["pix"],
+            "pix_key": context.user_data["pix"],
         }
         response = await register_client(data)
         if response.get("error"):
           await query.edit_message_text(
-              "Ocorreu um erro ao registrar seu cadastro. Por favor, tente novamente."
+              "Ocorreu um erro ao registrar seu cadastro. Por favor, tente novamente mais tarde."
           )
           return ConversationHandler.END
         
@@ -302,7 +317,8 @@ async def confirm_pix(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         return OPTION
     else:
         await query.edit_message_text(
-            "Por favor, me informe sua chave PIX novamente."
+            "Por favor, me informe sua chave PIX novamente.",
+            reply_markup=reply_keyboard_change_pix_type,
         )
         return PIX
 
@@ -483,6 +499,9 @@ def main() -> None:
         states={
             EMAIL: [MessageHandler(filters.TEXT, email)],
             CONFIRM_EMAIL: [CallbackQueryHandler(confirm_email, pattern="^(Sim|Não)$")],
+            PIX_TYPE: [CallbackQueryHandler(pix_type, pattern="^(CPF|CNPJ|Chave aleatória|Email|Telefone|Cancelar)$")],
+            PIX: [CallbackQueryHandler(show_pix_type_menu, pattern="^(Mudar tipo de chave)$"), MessageHandler(filters.TEXT, pix)],
+            CONFIRM_PIX: [CallbackQueryHandler(confirm_pix, pattern="^(Sim|Não)$")],
             OPTION: [CallbackQueryHandler(option, pattern="^(Verificar saldo|Recarregar saldo|Iniciar quiz|Cancelar|Retornar ao menu)$")],
             SHOW_MENU: [CallbackQueryHandler(show_menu, pattern="^(Retornar ao menu)$")],
             VALUE: [CallbackQueryHandler(value, pattern="^(1R\$|5R\$|10R\$|100R\$|1000R\$|Cancelar)$")],
@@ -490,7 +509,7 @@ def main() -> None:
             START_QUIZ: [CallbackQueryHandler(start_quiz, pattern="^(A|B|C|D)")],
             CHECK_ANSWER: [CallbackQueryHandler(check_answer)],
         },
-        fallbacks=[CommandHandler("cancel", cancel)],
+        fallbacks=[CommandHandler("cancel", cancel), CommandHandler("start", start)],
     )
 
     application.add_handler(conv_handler)
