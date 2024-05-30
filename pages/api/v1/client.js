@@ -114,7 +114,7 @@ async function updateClient(req, res) {
     return;
   }
 
-  current_client_data = await database.query(`
+  const current_client_data = await database.query(`
     SELECT balance, pix_type, pix_key
     FROM clients
     WHERE email = '${email}';
