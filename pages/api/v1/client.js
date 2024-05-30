@@ -33,7 +33,7 @@ async function getClient(req, res) {
 
   const result = await database.query(getClientQuery);
   const client = result.rows;
-  res.status(200).json(client);
+  res.status(200).json(client[0]);
 }
 
 async function postClient(req, res) {

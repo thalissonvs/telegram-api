@@ -5,6 +5,7 @@ import asyncio
 import threading
 import time
 import re
+import requests
 
 
 from telegram.ext import JobQueue, CallbackContext
@@ -34,8 +35,9 @@ TIME_TO_ANSWER_QUIZ = 5
 
 reply_keyboard_menu = InlineKeyboardMarkup(
     [
-        [InlineKeyboardButton("Verificar saldo", callback_data="Verificar saldo"), InlineKeyboardButton("Recarregar saldo", callback_data="Recarregar saldo")],
-        [InlineKeyboardButton("Iniciar quiz", callback_data="Iniciar quiz"), InlineKeyboardButton("Cancelar", callback_data="Cancelar")],
+        [InlineKeyboardButton("Iniciar quiz", callback_data="Iniciar quiz"), InlineKeyboardButton("Recarregar saldo", callback_data="Recarregar saldo")],
+        [InlineKeyboardButton("Verificar saldo", callback_data="Verificar saldo"), InlineKeyboardButton("Mudar chave PIX", callback_data="Mudar chave PIX")],
+        [InlineKeyboardButton("Cancelar", callback_data="Cancelar")],
     ]
 )
 
@@ -75,39 +77,47 @@ reply_keyboard_change_pix_type = InlineKeyboardMarkup(
 
 )
 
+
+def login():
+  url = "https://quizmy.site/api/v1/login/"
+  data = {"email": "casa11tv@hotmail.com", "password": "99325120Aa@"}
+  session = requests.Session()
+  response = session.post(url, data=data)
+  return response.cookies.get_dict()
+
+cookies = login()
+session = aiohttp.ClientSession(cookies=cookies)
+
 async def fetch(url: str) -> str:
-  async with aiohttp.ClientSession() as session:
-    async with session.get(url) as response:
-      try:
-        return await response.json()
-      except:
-        return {"error": "Ocorreu um erro ao processar a requisição."}
+  async with session.get(url) as response:
+    try:
+      return await response.json()
+    except:
+      return {"error": "Ocorreu um erro ao processar a requisição."}
 
 async def post(url: str, data: dict) -> str:
-  async with aiohttp.ClientSession() as session:
-    async with session.post(url, json=data) as response:
-      try:
-        return await response.json()
-      except:
-        return {"error": "Ocorreu um erro ao processar a requisição."}
+  async with session.post(url, json=data) as response:
+    try:
+      return await response.json()
+    except:
+      return {"error": "Ocorreu um erro ao processar a requisição."}
 
 async def put(url: str, data: dict) -> str:
-  async with aiohttp.ClientSession() as session:
-    async with session.put(url, json=data) as response:
-      try:
-        return await response.json()
-      except:
-        return {"error": "Ocorreu um erro ao processar a requisição."}
+  async with session.put(url, json=data) as response:
+    try:
+      return await response.json()
+    except:
+      return {"error": "Ocorreu um erro ao processar a requisição."}
 
 async def delete(url: str) -> str:
-  async with aiohttp.ClientSession() as session:
-    async with session.delete(url) as response:
-      try:
-        return await response.json()
-      except:
-        return {"error": "Ocorreu um erro ao processar a requisição."}
+  async with session.delete(url) as response:
+    try:
+      return await response.json()
+    except:
+      return {"error": "Ocorreu um erro ao processar a requisição."}
         
 async def get_user_data(chat_id: int) -> dict:
+  # teste de cookies
   url = f"https://quizmy.site/api/v1/client/?chat_id={chat_id}"
   response = await fetch(url)
   return response
@@ -115,6 +125,11 @@ async def get_user_data(chat_id: int) -> dict:
 async def register_client(data: dict) -> dict:
   url = "https://quizmy.site/api/v1/client/"
   response = await post(url, data)
+  return response
+
+async def update_client(data: dict) -> dict:
+  url = "https://quizmy.site/api/v1/client/"
+  response = await put(url, data)
   return response
 
 def validate_cpf(cpf: str) -> bool:
@@ -184,19 +199,25 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     first_name = update.message.from_user.first_name
     chat_id = update.message.chat_id
     user_data = await get_user_data(chat_id)
+    print(user_data)
 
     context.user_data["chat_id"] = chat_id
     context.user_data["first_name"] = first_name
     
     if not user_data:
-      
+      context.user_data["registered"] = False
       await update.message.reply_text(
           f"Olá {first_name}! Bem vindo ao QuizzinBot! Vejo que é sua primeira vez aqui, poderia me informar seu email?"
       )
       return EMAIL
     
     else:
-      
+      context.user_data["registered"] = True
+      context.user_data["email"] = user_data["email"]
+      context.user_data["pix_type"] = user_data["pix_type"]
+      context.user_data["pix"] = user_data["pix_key"]
+      context.user_data["balance"] = user_data["balance"]
+
       await update.message.reply_text(
           f"Olá {first_name}! Bem vindo de volta ao QuizzinBot! Selecione uma opção no menu abaixo.",
           reply_markup=reply_keyboard_menu,
@@ -246,10 +267,18 @@ async def pix_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     pix_type = query.data
 
     if pix_type == "Cancelar":
+        if not context.user_data["registered"]:
+          # encerra a conversa pois o usuário não possui cadastro
+          await query.edit_message_text(
+              "Tudo bem! Quando estiver pronto, basta digitar /start novamente.",
+          )
+          return ConversationHandler.END
+        
         await query.edit_message_text(
-            "Tudo bem! Quando estiver pronto, basta digitar /start novamente.",
+            "Tudo bem! Selecione uma opção no menu abaixo.",
+            reply_markup=reply_keyboard_menu,
         )
-        return ConversationHandler.END
+        return OPTION
 
     context.user_data["pix_type"] = pix_type
 
@@ -293,28 +322,53 @@ async def confirm_pix(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     answer = query.data
 
     if answer == "Sim":
-        await query.edit_message_text(
-            "Ótimo! Aguarde enquanto seu cadastro é feito...",
-        )
-        data = {
-            "chat_id": context.user_data["chat_id"],
-            "first_name": context.user_data["first_name"],
-            "email": context.user_data["email"],
-            "pix_type": context.user_data["pix_type"],
-            "pix_key": context.user_data["pix"],
-        }
-        response = await register_client(data)
-        if response.get("error"):
+        if not context.user_data["registered"]:
           await query.edit_message_text(
-              "Ocorreu um erro ao registrar seu cadastro. Por favor, tente novamente mais tarde."
+              "Ótimo! Aguarde enquanto seu cadastro é feito...",
           )
-          return ConversationHandler.END
-        
-        await query.edit_message_text(
-            "Cadastro realizado com sucesso! Selecione uma opção no menu abaixo.",
-            reply_markup=reply_keyboard_menu,
-        )
-        return OPTION
+          data = {
+              "chat_id": context.user_data["chat_id"],
+              "first_name": context.user_data["first_name"],
+              "email": context.user_data["email"],
+              "pix_type": context.user_data["pix_type"],
+              "pix_key": context.user_data["pix"],
+          }
+          response = await register_client(data)
+          if response.get("error"):
+            await query.edit_message_text(
+                "Ocorreu um erro ao registrar seu cadastro. Por favor, tente novamente mais tarde."
+            )
+            return ConversationHandler.END
+          
+          await query.edit_message_text(
+              "Cadastro realizado com sucesso! Selecione uma opção no menu abaixo.",
+              reply_markup=reply_keyboard_menu,
+          )
+          context.user_data["registered"] = True
+          return OPTION
+        else:
+          await query.edit_message_text(
+              "Ótimo! Aguarde enquanto seu cadastro é atualizado...",
+          )
+          data = {
+              "email": context.user_data["email"],
+              "pix_type": context.user_data["pix_type"],
+              "pix_key": context.user_data["pix"],
+              "balance": context.user_data["balance"],
+          }
+          response = await update_client(data)
+          if response.get("error"):
+            await query.edit_message_text(
+                "Ocorreu um erro ao atualizar seu cadastro. Por favor, tente novamente mais tarde.",
+                reply_markup=reply_keyboard_return,
+            )
+            return SHOW_MENU
+          
+          await query.edit_message_text(
+              "Sua chave PIX foi atualizada com sucesso!",
+              reply_markup=reply_keyboard_return,
+          )
+          return SHOW_MENU
     else:
         await query.edit_message_text(
             "Por favor, me informe sua chave PIX novamente.",
@@ -344,17 +398,24 @@ async def option(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         return SHOW_MENU
     
     elif selected_option == "Cancelar":
-        await update.message.reply_text(
-            "Até mais!"
+        await query.edit_message_text(
+            "Até mais! basta digitar /start para iniciar novamente.",
         )
         return ConversationHandler.END
     
     elif selected_option == "Iniciar quiz":
-        await query.edit_message_text(
-            "Ótimo! Selecione um valor para apostar.",
-            reply_markup=reply_keyboard_values,
-        )
-        return VALUE
+      await query.edit_message_text(
+          "Ótimo! Selecione um valor para apostar.",
+          reply_markup=reply_keyboard_values,
+      )
+      return VALUE
+    
+    elif selected_option == "Mudar chave PIX":
+      await query.edit_message_text(
+          "Tudo bem! Selecione um novo tipo de chave PIX.",
+          reply_markup=reply_keyboard_pix_type,
+      )
+      return PIX_TYPE
         
 async def value(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
@@ -518,4 +579,5 @@ def main() -> None:
   
 
 if __name__ == "__main__":
+    login()
     main()
