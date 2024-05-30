@@ -133,6 +133,8 @@ async function updateClient(req, res) {
     WHERE email = '${email}';
   `;
 
+  console.log(updateClientQuery);
+
   try {
     await database.query(updateClientQuery);
     res.status(200).json({ status: "ok" });

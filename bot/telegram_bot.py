@@ -346,6 +346,7 @@ async def confirm_pix(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
               reply_markup=reply_keyboard_menu,
           )
           context.user_data["registered"] = True
+          context.user_data["balance"] = 0
           return OPTION
         else:
           await query.edit_message_text(
@@ -440,17 +441,16 @@ async def add_balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     response = await update_client(data)
 
     if response.get("error"):
-      print(response)
       await update.message.reply_text(
           "Ocorreu um erro ao atualizar seu saldo. Por favor, tente novamente mais tarde."
       )
       return ConversationHandler.END
 
+    context.user_data["balance"] += float(value)
     await update.message.reply_text(
         f"Saldo atualizado com sucesso! Seu novo saldo é de {context.user_data['balance']}R$.",
         reply_markup=reply_keyboard_return,
     )
-    context.user_data["balance"] += float(value)
     return SHOW_MENU
 
 async def value(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
