@@ -96,16 +96,16 @@ async def fetch(url: str) -> str:
       return {"error": "Ocorreu um erro ao processar a requisição."}
 
 async def post(url: str, data: dict) -> str:
-  async with session.post(url, json=data) as response:
+  async with session.post(url, data=data) as response:
     try:
       return await response.json()
     except:
       return {"error": "Ocorreu um erro ao processar a requisição."}
 
 async def put(url: str, data: dict) -> str:
-  async with session.put(url, json=data) as response:
+  async with session.put(url, data=data) as response:
     try:
-      print(response.status_code)
+      print(response.status)
       return await response.json()
     except:
       return {"error": "Ocorreu um erro ao processar a requisição."}

@@ -8,6 +8,8 @@ async function client(req, res) {
   );
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
+  console.log(req.method);
+
   const methodsMap = {
     DELETE: deleteClient,
     GET: getClient,
