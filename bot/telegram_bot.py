@@ -199,7 +199,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     first_name = update.message.from_user.first_name
     chat_id = update.message.chat_id
     user_data = await get_user_data(chat_id)
-    print(user_data)
 
     context.user_data["chat_id"] = chat_id
     context.user_data["first_name"] = first_name
@@ -354,7 +353,6 @@ async def confirm_pix(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
               "email": context.user_data["email"],
               "pix_type": context.user_data["pix_type"],
               "pix_key": context.user_data["pix"],
-              "balance": context.user_data["balance"],
           }
           response = await update_client(data)
           if response.get("error"):
@@ -392,7 +390,7 @@ async def option(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     if selected_option == "Verificar saldo":
         await query.edit_message_text(
-            "Seu saldo é de 100R$.",
+            f"Seu saldo é de {context.user_data['balance']}R$.",
             reply_markup=reply_keyboard_return,
         )
         return SHOW_MENU
@@ -430,7 +428,7 @@ async def value(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         return OPTION
 
 
-    context.user_data["selected_value"] = selected_value
+    context.user_data["selected_value"] = float(selected_value.split("R$")[0])
 
     await query.edit_message_text(
         f"Você escolheu apostar {selected_value}. Está correto?",
@@ -444,12 +442,22 @@ async def confirm_value(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     answer = query.data
 
     if answer == "Sim":
-        for second in range(TIME_TO_START_QUIZ):
-            await query.edit_message_text(
-                f"Você está pronto? O quiz iniciará em {TIME_TO_START_QUIZ - second} segundos."
-            )
-            await asyncio.sleep(1)
-        return await start_quiz(update, context)
+        
+        if context.user_data["balance"] > context.user_data["selected_value"]:
+          for second in range(TIME_TO_START_QUIZ):
+              await query.edit_message_text(
+                  f"Você está pronto? O quiz iniciará em {TIME_TO_START_QUIZ - second} segundos."
+              )
+              await asyncio.sleep(1)
+          return await start_quiz(update, context)
+        
+        else:
+          await query.edit_message_text(
+              "Você não possui saldo suficiente, recarregue no menu principal.",
+              reply_markup=reply_keyboard_return,
+          )
+          return SHOW_MENU
+    
     else:
         await query.edit_message_text(
             "Tudo certo! Basta escolher um novo valor para apostar.",
@@ -460,6 +468,20 @@ async def confirm_value(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 async def start_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
   query = update.callback_query
   await query.answer()
+
+  context.user_data["balance"] -= context.user_data["selected_value"]
+  data = {
+    "email": context.user_data["email"],
+    "balance": context.user_data["balance"]
+  }
+  response = await update_client(data)
+  
+  if response.get("error"):
+    await query.edit_message_text(
+        "Ocorreu um erro ao atualizar seu saldo. Por favor, tente novamente mais tarde.",
+        reply_markup=reply_keyboard_return,
+    )
+    return SHOW_MENU
 
   reply_keyboard_quiz = InlineKeyboardMarkup(
     [
@@ -563,7 +585,7 @@ def main() -> None:
             PIX_TYPE: [CallbackQueryHandler(pix_type, pattern="^(CPF|CNPJ|Chave aleatória|Email|Telefone|Cancelar)$")],
             PIX: [CallbackQueryHandler(show_pix_type_menu, pattern="^(Mudar tipo de chave)$"), MessageHandler(filters.TEXT, pix)],
             CONFIRM_PIX: [CallbackQueryHandler(confirm_pix, pattern="^(Sim|Não)$")],
-            OPTION: [CallbackQueryHandler(option, pattern="^(Verificar saldo|Recarregar saldo|Iniciar quiz|Cancelar|Retornar ao menu)$")],
+            OPTION: [CallbackQueryHandler(option, pattern="^(Verificar saldo|Recarregar saldo|Iniciar quiz|Cancelar|Retornar ao menu|Mudar chave PIX)$")],
             SHOW_MENU: [CallbackQueryHandler(show_menu, pattern="^(Retornar ao menu)$")],
             VALUE: [CallbackQueryHandler(value, pattern="^(1R\$|5R\$|10R\$|100R\$|1000R\$|Cancelar)$")],
             CONFIRM_VALUE: [CallbackQueryHandler(confirm_value, pattern="^(Sim|Não)$")],

@@ -96,13 +96,44 @@ async function updateClient(req, res) {
   const pix_type = req.body.pix_type;
   const pix_key = req.body.pix_key;
 
+  // o único parâmetro obrigatório é o email
+  if (!email) {
+    res.status(400).json({ error: "Missing fields" });
+    return;
+  }
+
+  const validTypes = ["CPF", "CNPJ", "Chave aleatória", "Email", "Telefone"];
+  if (pix_type && !validTypes.includes(pix_type)) {
+    res.status(400).json({ error: "Invalid pix_type" });
+    return;
+  }
+
+  current_client_data = await database.query(`
+    SELECT balance, pix_type, pix_key
+    FROM clients
+    WHERE email = '${email}';
+  `);
+
+  if (!current_client_data) {
+    res.status(400).json({ error: "Client not found" });
+    return;
+  }
+
   const updateClientQuery = `
     UPDATE clients
-    SET balance = ${balance}, pix_type = '${pix_type}', pix_key = '${pix_key}'
+    SET balance = ${balance || current_client_data.rows[0].balance},
+        pix_type = '${pix_type || current_client_data.rows[0].pix_type}',
+        pix_key = '${pix_key || current_client_data.rows[0].pix_key}'
     WHERE email = '${email}';
   `;
-  await database.query(updateClientQuery);
-  res.status(200).end();
+
+  try {
+    await database.query(updateClientQuery);
+    res.status(200).json({ status: "ok" });
+  } catch (err) {
+    console.error("Error updating client", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
 }
 
 export default client;
