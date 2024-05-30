@@ -73,8 +73,9 @@ async function createTablePrices() {
 
   const createTablePrices = `
     CREATE TABLE prices (
-      difficulty INTEGER PRIMARY KEY,
-      price INTEGER NOT NULL
+      id SERIAL PRIMARY KEY,
+      price INTEGER NOT NULL,
+      difficulty INTEGER NOT NULL
     );
   `;
 
@@ -110,6 +111,32 @@ async function createTableUsers() {
   }
 }
 
+async function createTableClients() {
+  const client = getClient();
+  await client.connect();
+
+  const createTableClients = `
+    CREATE TABLE clients (
+      id SERIAL PRIMARY KEY,
+      first_name VARCHAR(255) NOT NULL,
+      email VARCHAR(255) NOT NULL,
+      chat_id INTEGER NOT NULL,
+      pix_type VARCHAR(255) NOT NULL,
+      pix_key VARCHAR(255) NOT NULL,
+      balance FLOAT NOT NULL
+    );
+  `;
+
+  try {
+    await client.query(createTableClients);
+    console.log("Table clients created successfully");
+  } catch (err) {
+    console.error("Error creating table clients", err);
+  } finally {
+    await client.end();
+  }
+}
+
 // verifica se as tabelas já existem, se não, chama o método para criar
 async function checkTables() {
   const client = getClient();
@@ -131,11 +158,16 @@ async function checkTables() {
     SELECT to_regclass('public.users') as table_name;
   `;
 
+  const checkTableClients = `
+    SELECT to_regclass('public.clients') as table_name;
+  `;
+
   try {
     const resultQuizzes = await client.query(checkTableQuizzes);
     const resultOptions = await client.query(checkTableOptions);
     const resultPrices = await client.query(checkTablePrices);
     const resultUsers = await client.query(checkTableUsers);
+    const resultClients = await client.query(checkTableClients);
 
     if (!resultQuizzes.rows[0].table_name) {
       await createTableQuizzes();
@@ -151,6 +183,10 @@ async function checkTables() {
 
     if (!resultUsers.rows[0].table_name) {
       await createTableUsers();
+    }
+
+    if (!resultClients.rows[0].table_name) {
+      await createTableClients();
     }
 
     console.log("Tables checked successfully");
