@@ -29,7 +29,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
-SHOW_MENU, EMAIL, CONFIRM_EMAIL, PIX_TYPE, PIX, CONFIRM_PIX, OPTION, VALUE, CONFIRM_VALUE, START_QUIZ, CHECK_ANSWER = range(11)
+SHOW_MENU, EMAIL, CONFIRM_EMAIL, PIX_TYPE, PIX, CONFIRM_PIX, OPTION, ADD_BALANCE, VALUE, CONFIRM_VALUE, START_QUIZ, CHECK_ANSWER = range(12)
 TIME_TO_START_QUIZ = 5
 TIME_TO_ANSWER_QUIZ = 5
 
@@ -105,6 +105,7 @@ async def post(url: str, data: dict) -> str:
 async def put(url: str, data: dict) -> str:
   async with session.put(url, json=data) as response:
     try:
+      print(response.status_code)
       return await response.json()
     except:
       return {"error": "Ocorreu um erro ao processar a requisição."}
@@ -199,11 +200,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     first_name = update.message.from_user.first_name
     chat_id = update.message.chat_id
     user_data = await get_user_data(chat_id)
+    print(chat_id)
 
     context.user_data["chat_id"] = chat_id
     context.user_data["first_name"] = first_name
     
-    if not user_data:
+    if not user_data or user_data.get("error"):
       context.user_data["registered"] = False
       await update.message.reply_text(
           f"Olá {first_name}! Bem vindo ao QuizzinBot! Vejo que é sua primeira vez aqui, poderia me informar seu email?"
@@ -414,7 +416,43 @@ async def option(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
           reply_markup=reply_keyboard_pix_type,
       )
       return PIX_TYPE
-        
+    
+    elif selected_option == "Recarregar saldo":
+      await query.edit_message_text(
+          "Ótimo! Insira abaixo o valor que deseja adicionar ao seu saldo (apenas números inteiros).",
+      )
+      return ADD_BALANCE
+  
+async def add_balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    value = update.message.text.strip()
+
+    if not value.isdigit():
+        await update.message.reply_text(
+            "Por favor, me informe um valor válido (apenas números inteiros)."
+        )
+        return ADD_BALANCE
+
+    # TODO: sistema de pagamento
+    data = {
+      "email": context.user_data["email"],
+      "balance": context.user_data["balance"]
+    }
+    response = await update_client(data)
+
+    if response.get("error"):
+      print(response)
+      await update.message.reply_text(
+          "Ocorreu um erro ao atualizar seu saldo. Por favor, tente novamente mais tarde."
+      )
+      return ConversationHandler.END
+
+    await update.message.reply_text(
+        f"Saldo atualizado com sucesso! Seu novo saldo é de {context.user_data['balance']}R$.",
+        reply_markup=reply_keyboard_return,
+    )
+    context.user_data["balance"] += float(value)
+    return SHOW_MENU
+
 async def value(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
@@ -426,7 +464,6 @@ async def value(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
           reply_markup=reply_keyboard_menu,
         )
         return OPTION
-
 
     context.user_data["selected_value"] = float(selected_value.split("R$")[0])
 
@@ -586,6 +623,7 @@ def main() -> None:
             PIX: [CallbackQueryHandler(show_pix_type_menu, pattern="^(Mudar tipo de chave)$"), MessageHandler(filters.TEXT, pix)],
             CONFIRM_PIX: [CallbackQueryHandler(confirm_pix, pattern="^(Sim|Não)$")],
             OPTION: [CallbackQueryHandler(option, pattern="^(Verificar saldo|Recarregar saldo|Iniciar quiz|Cancelar|Retornar ao menu|Mudar chave PIX)$")],
+            ADD_BALANCE: [MessageHandler(filters.TEXT, add_balance)],
             SHOW_MENU: [CallbackQueryHandler(show_menu, pattern="^(Retornar ao menu)$")],
             VALUE: [CallbackQueryHandler(value, pattern="^(1R\$|5R\$|10R\$|100R\$|1000R\$|Cancelar)$")],
             CONFIRM_VALUE: [CallbackQueryHandler(confirm_value, pattern="^(Sim|Não)$")],
