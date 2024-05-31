@@ -27,19 +27,28 @@ async function client(req, res) {
 async function getClient(req, res) {
   const chat_id = req.query.chat_id;
 
-  const getClientQuery = `
-    SELECT id, first_name, email, chat_id, pix_type, pix_key, balance
-    FROM clients
-    WHERE chat_id = '${chat_id}';
-  `;
-
-  const result = await database.query(getClientQuery);
-  const client = result.rows;
-  if (client.length === 0) {
-    res.status(404).json({ error: "Client not found" });
-    return;
+  if (!chat_id) {
+    const getClientsQuery = `
+      SELECT id, first_name, email, chat_id, pix_type, pix_key, balance
+      FROM clients;
+    `;
+    const result = await database.query(getClientsQuery);
+    const clients = result.rows;
+    res.status(200).json(clients);
+  } else {
+    const getClientsQuery = `
+      SELECT id, first_name, email, chat_id, pix_type, pix_key, balance
+      FROM clients
+      WHERE chat_id = '${chat_id}';
+    `;
+    const result = await database.query(getClientsQuery);
+    const client = result.rows;
+    if (client.length === 0) {
+      res.status(404).json({ error: "Client not found" });
+      return;
+    }
+    res.status(200).json(client[0]);
   }
-  res.status(200).json(client[0]);
 }
 
 async function postClient(req, res) {
