@@ -6,6 +6,7 @@ import threading
 import time
 import re
 import requests
+from datetime import datetime
 
 
 from telegram.ext import JobQueue, CallbackContext
@@ -29,16 +30,17 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
-SHOW_MENU, EMAIL, CONFIRM_EMAIL, PIX_TYPE, PIX, CONFIRM_PIX, OPTION, ADD_BALANCE, VALUE, CONFIRM_VALUE, START_QUIZ, CHECK_ANSWER = range(12)
+SHOW_MENU, EMAIL, CONFIRM_EMAIL, PIX_TYPE, PIX, CONFIRM_PIX, OPTION, ADD_BALANCE, VALUE, CONFIRM_VALUE, PAYMENTS, PRIZES, START_QUIZ, CHECK_ANSWER = range(14)
 TIME_TO_START_QUIZ = 5
 TIME_TO_ANSWER_QUIZ = 5
 
 reply_keyboard_menu = InlineKeyboardMarkup(
-    [
-        [InlineKeyboardButton("Iniciar quiz", callback_data="Iniciar quiz"), InlineKeyboardButton("Recarregar saldo", callback_data="Recarregar saldo")],
-        [InlineKeyboardButton("Verificar saldo", callback_data="Verificar saldo"), InlineKeyboardButton("Mudar chave PIX", callback_data="Mudar chave PIX")],
-        [InlineKeyboardButton("Cancelar", callback_data="Cancelar")],
-    ]
+  [
+    [InlineKeyboardButton("Iniciar quiz", callback_data="Iniciar quiz"), InlineKeyboardButton("Recarregar saldo", callback_data="Recarregar saldo")],
+    [InlineKeyboardButton("Verificar saldo", callback_data="Verificar saldo"), InlineKeyboardButton("Mudar chave PIX", callback_data="Mudar chave PIX")],
+    [InlineKeyboardButton("Últimos pagamentos", callback_data="Últimos pagamentos"), InlineKeyboardButton("Meus prêmios", callback_data="Meus prêmios")],
+    [InlineKeyboardButton("Cancelar", callback_data="Cancelar")],
+  ]
 )
 
 reply_keyboard_pix_type = InlineKeyboardMarkup(
@@ -133,6 +135,26 @@ async def update_client(data: dict) -> dict:
   response = await put(url, data)
   return response
 
+async def new_payment(data: dict) -> dict:
+  url = "https://quizmy.site/api/v1/payments/"
+  response = await post(url, data)
+  return response
+
+async def get_payments(client_id: int) -> dict:
+  url = f"https://quizmy.site/api/v1/payments/?client_id={client_id}"
+  response = await fetch(url)
+  return response
+
+async def new_prize(data: dict) -> dict:
+  url = "https://quizmy.site/api/v1/prizes/"
+  response = await post(url, data)
+  return response
+
+async def get_prizes(client_id: int) -> dict:
+  url = f"https://quizmy.site/api/v1/prizes/?client_id={client_id}"
+  response = await fetch(url)
+  return response
+
 def validate_cpf(cpf: str) -> bool:
   # Remove any non-numeric characters
   cpf = re.sub(r'\D', '', cpf)
@@ -214,6 +236,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     
     else:
       context.user_data["registered"] = True
+      context.user_data["client_id"] = user_data["id"]
       context.user_data["email"] = user_data["email"]
       context.user_data["pix_type"] = user_data["pix_type"]
       context.user_data["pix"] = user_data["pix_key"]
@@ -346,6 +369,7 @@ async def confirm_pix(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
               reply_markup=reply_keyboard_menu,
           )
           context.user_data["registered"] = True
+          context.user_data["client_id"] = response["id"]
           context.user_data["balance"] = 0
           return OPTION
         else:
@@ -386,6 +410,41 @@ async def show_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     )
     return OPTION
 
+async def show_payments(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    client_id = context.user_data["client_id"]
+    response = await get_payments(client_id)
+
+    if response.get("error"):
+      await query.edit_message_text(
+          "Ocorreu um erro ao buscar seus pagamentos. Por favor, tente novamente mais tarde.",
+          reply_markup=reply_keyboard_return,
+      )
+      return SHOW_MENU
+
+    if not response:
+      await query.edit_message_text(
+          "Você não possui pagamentos registrados.",
+          reply_markup=reply_keyboard_return,
+      )
+      return SHOW_MENU
+
+    payments = []
+    for payment in response:
+      value = f"{payment["value"]}R$"
+      date_timestamp = payment["date"]
+      date = datetime.fromtimestamp(date_timestamp).strftime("%d/%m/%Y %H:%M:%S")
+      payments.append(f"{value} - {date}")
+    
+    payments_string = "\n".join(payments)
+    
+    await query.edit_message_text(
+        f"Seus últimos pagamentos:\n{payments_string}",
+        reply_markup=reply_keyboard_return,
+    )
+    return SHOW_MENU
+
 async def option(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
@@ -406,7 +465,7 @@ async def option(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     
     elif selected_option == "Iniciar quiz":
       await query.edit_message_text(
-          "Ótimo! Selecione um valor para apostar.",
+          "Ótimo! Selecione um valor para investir.",
           reply_markup=reply_keyboard_values,
       )
       return VALUE
@@ -423,6 +482,9 @@ async def option(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
           "Ótimo! Insira abaixo o valor que deseja adicionar ao seu saldo (apenas números inteiros).",
       )
       return ADD_BALANCE
+    
+    elif selected_option == "Últimos pagamentos":
+      return await show_payments(update, context)
   
 async def add_balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     value = update.message.text.strip()
@@ -436,11 +498,21 @@ async def add_balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     # TODO: sistema de pagamento
     data = {
       "email": context.user_data["email"],
-      "balance": context.user_data["balance"]
+      "balance": context.user_data["balance"] + float(value)
     }
-    response = await update_client(data)
+    payment_data = {
+      "client_id": context.user_data["client_id"],
+      "value": value,
+      "mercado_pago_id": "123456", # temporário
+    }
 
-    if response.get("error"):
+    response_payment = await new_payment(payment_data)
+    response_user = await update_client(data)
+
+    if response_payment.get("error"):
+      logging.error(response_payment.get("error"))
+
+    if response_user.get("error"):
       await update.message.reply_text(
           "Ocorreu um erro ao atualizar seu saldo. Por favor, tente novamente mais tarde."
       )
@@ -579,17 +651,16 @@ async def check_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 
   if selected_answer == context.user_data["correct_answer"]:
     await query.edit_message_text(
-      "Parabéns! Você acertou a resposta!",
+      f"Parabéns, você ganhou! Seu prêmio é de {context.user_data['selected_value'] * 2}R$ e será creditado em breve.",
       reply_markup=reply_keyboard_return,
     )
     return SHOW_MENU
   else:
     await query.edit_message_text(
-      "Que pena! Você errou a resposta.",
+      f"Que pena! Você errou a resposta. Seu saldo perdido foi de {context.user_data['selected_value']}R$.",
       reply_markup=reply_keyboard_return,
     )
     return SHOW_MENU
-
 
 async def timeout_callback(context: CallbackContext):
   user_context: ContextTypes.DEFAULT_TYPE = context.job.data["context"]

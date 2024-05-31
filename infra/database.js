@@ -137,6 +137,55 @@ async function createTableClients() {
   }
 }
 
+async function createTablePayments() {
+  const client = getClient();
+  await client.connect();
+
+  const createTablePayments = `
+    CREATE TABLE payments (
+      id SERIAL PRIMARY KEY,
+      client_id INTEGER NOT NULL,
+      price FLOAT NOT NULL,
+      mercado_pago_id VARCHAR(255) NOT NULL,
+      date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (client_id) REFERENCES clients(id)
+    )
+  `;
+
+  try {
+    await client.query(createTablePayments);
+    console.log("Table payments created successfully");
+  } catch (err) {
+    console.error("Error creating table payments", err);
+  } finally {
+    await client.end();
+  }
+}
+
+async function createTablePrizes() {
+  const client = getClient();
+  await client.connect();
+
+  const createTablePrizes = `
+    CREATE TABLE prizes (
+      id SERIAL PRIMARY KEY,
+      client_id INTEGER NOT NULL,
+      price FLOAT NOT NULL,
+      status INTEGER NOT NULL,
+      FOREIGN KEY (client_id) REFERENCES clients(id)
+    )
+  `;
+
+  try {
+    await client.query(createTablePrizes);
+    console.log("Table prizes created successfully");
+  } catch (err) {
+    console.error("Error creating table prizes", err);
+  } finally {
+    await client.end();
+  }
+}
+
 // verifica se as tabelas já existem, se não, chama o método para criar
 async function checkTables() {
   const client = getClient();
@@ -162,12 +211,22 @@ async function checkTables() {
     SELECT to_regclass('public.clients') as table_name;
   `;
 
+  const checkTablePayments = `
+    SELECT to_regclass('public.payments') as table_name;
+  `;
+
+  const checkTablePrizes = `
+    SELECT to_regclass('public.prizes') as table_name;
+  `;
+
   try {
     const resultQuizzes = await client.query(checkTableQuizzes);
     const resultOptions = await client.query(checkTableOptions);
     const resultPrices = await client.query(checkTablePrices);
     const resultUsers = await client.query(checkTableUsers);
     const resultClients = await client.query(checkTableClients);
+    const resultPayments = await client.query(checkTablePayments);
+    const resultPrizes = await client.query(checkTablePrizes);
 
     if (!resultQuizzes.rows[0].table_name) {
       await createTableQuizzes();
@@ -187,6 +246,14 @@ async function checkTables() {
 
     if (!resultClients.rows[0].table_name) {
       await createTableClients();
+    }
+
+    if (!resultPayments.rows[0].table_name) {
+      await createTablePayments();
+    }
+
+    if (!resultPrizes.rows[0].table_name) {
+      await createTablePrizes();
     }
 
     console.log("Tables checked successfully");
