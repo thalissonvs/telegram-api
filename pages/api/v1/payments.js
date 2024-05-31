@@ -25,10 +25,16 @@ async function payments(req, res) {
 async function getPayments(req, res) {
   const client_id = req.query.client_id;
 
+  // faz um join com a tabela de clientes para trazer o nome do cliente
+  if (!client_id) {
+    res.status(400).json({ error: "Missing client_id" });
+  }
+
   const getPaymentQuery = `
-    SELECT id, client_id, price, mercado_pago_id, date
-    FROM payments
-    WHERE client_id = ${client_id};
+    SELECT p.id, p.client_id, c.first_name, p.price, p.mercado_pago_id, p.date
+    FROM payments p
+    JOIN clients c ON p.client_id = c.id
+    WHERE p.client_id = ${client_id};
   `;
 
   const result = await database.query(getPaymentQuery);

@@ -68,6 +68,7 @@ const ClientsPage = () => {
     document.getElementById("email").value = clients[data].email;
     document.getElementById("pix_type").value = clients[data].pix_type;
     document.getElementById("pix_key").value = clients[data].pix_key;
+    document.getElementById("balance").value = clients[data].balance;
   };
 
   const updateClientData = (event) => {
@@ -76,13 +77,14 @@ const ClientsPage = () => {
     const email = document.getElementById("email").value;
     const pix_type = document.getElementById("pix_type").value;
     const pix_key = document.getElementById("pix_key").value;
+    const balance = document.getElementById("balance").value;
 
     fetch("/api/v1/client", {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ first_name, email, pix_type, pix_key }),
+      body: JSON.stringify({ first_name, email, pix_type, pix_key, balance }),
     })
       .then((response) => {
         if (response.ok) {
@@ -238,6 +240,7 @@ const ClientsPage = () => {
             <thead>
               <tr>
                 <th>ID do cliente</th>
+                <th>Nome</th>
                 <th>Preço</th>
                 <th>Data</th>
               </tr>
@@ -246,6 +249,7 @@ const ClientsPage = () => {
               {payments.map((payment, index) => (
                 <tr key={index}>
                   <td>{payment.client_id}</td>
+                  <td>{payment.client.first_name}</td>
                   <td>{payment.price}</td>
                   <td>{payment.date}</td>
                 </tr>
@@ -363,6 +367,17 @@ const ClientsPage = () => {
               className="form-control"
               id="pix_key"
               placeholder="Chave PIX"
+            />
+          </div>
+          <div className="mb-3">
+            <label for="balance" className="form-label">
+              Saldo
+            </label>
+            <input
+              type="text"
+              className="form-control"
+              id="balance"
+              placeholder="Saldo"
             />
           </div>
           <button type="submit" className="btn btn-primary mb-2 w-100">
