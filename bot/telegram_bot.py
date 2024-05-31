@@ -7,14 +7,14 @@ import time
 import re
 import requests
 from datetime import datetime
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 import base64
 from PIL import Image
 from io import BytesIO
 
 
 from telegram.ext import JobQueue, CallbackContext
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, InputFile
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -25,8 +25,8 @@ from telegram.ext import (
     filters,
 )
 
-load_dotenv("../.env.development")
-
+load_dotenv(find_dotenv(".env.development"))
+print(os.getenv("ACCESS_TOKEN"))
 # Enable logging
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -36,7 +36,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
-SHOW_MENU, EMAIL, CONFIRM_EMAIL, PIX_TYPE, PIX, CONFIRM_PIX, OPTION, ADD_BALANCE, VALUE, CONFIRM_VALUE, PAYMENTS, PRIZES, START_QUIZ, CHECK_ANSWER = range(14)
+SHOW_MENU, EMAIL, CONFIRM_EMAIL, PIX_TYPE, PIX, CONFIRM_PIX, OPTION, ADD_BALANCE, VALUE, CONFIRM_VALUE, PAYMENTS, PRIZES, START_QUIZ, CHECK_ANSWER, CHECK_PAYMENT = range(15)
 TIME_TO_START_QUIZ = 5
 TIME_TO_ANSWER_QUIZ = 5
 
@@ -81,6 +81,13 @@ reply_keyboard_return = InlineKeyboardMarkup(
 reply_keyboard_change_pix_type = InlineKeyboardMarkup(
     [
         [InlineKeyboardButton("Mudar tipo de chave", callback_data="Mudar tipo de chave")],
+    ]
+
+)
+
+reply_keyboard_payment_done = InlineKeyboardMarkup(
+    [
+        [InlineKeyboardButton("Verificar", callback_data="Verificar"), InlineKeyboardButton("Cancelar", callback_data="Cancelar")],
     ]
 
 )
@@ -166,10 +173,16 @@ async def generate_payment(data: dict) -> dict:
   response = await post(url, data)
   return response
 
+async def get_payment(payment_id: int, access_token) -> dict:
+  url = f"https://quizmy.site/api/v1/getPayment?id={payment_id}&accessToken={access_token}"
+  response = await fetch(url)
+  return response
+
 async def decode_base64_image(base64_string: str) -> BytesIO:
   image = Image.open(BytesIO(base64.b64decode(base64_string)))
   image_io = BytesIO()
   image.save(image_io, format="PNG")
+  image_io.seek(0)
   return image_io
 
 def validate_cpf(cpf: str) -> bool:
@@ -531,7 +544,6 @@ async def show_prizes_option(update: Update, context: ContextTypes.DEFAULT_TYPE)
     )
     return SHOW_MENU
 
-
 async def add_balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     value = update.message.text.strip()
 
@@ -558,53 +570,72 @@ async def add_balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     qr_code_base64 = response["qr_code_base64"]
     qr_code_image = await decode_base64_image(qr_code_base64)
     qr_code = response["qr_code"]
+    payment_id = response["id"]
+
+    context.user_data["payment_id"] = payment_id # usado para verificar o pagamento posteriormente
 
     await update.message.reply_photo(
-        photo=qr_code_image,
-        caption=f"Escaneie o QR Code abaixo para efetuar o pagamento de {value}R$.",
-    )
-
-    await update.message.reply_text(
-       qr_code
+        InputFile(qr_code_image, filename="qr_code.png"),
+        caption=qr_code
     )
 
     await update.message.reply_text(
         "Após efetuar o pagamento, clique no botão abaixo para verificar se o saldo foi atualizado.",
-        reply_markup=reply_keyboard_return,
+        reply_markup=reply_keyboard_payment_done,
     )
 
-    return SHOW_MENU
+    return CHECK_PAYMENT
 
-
-    data = {
-      "email": context.user_data["email"],
-      "balance": context.user_data["balance"] + float(value)
-    }
-    payment_data = {
-      "client_id": context.user_data["client_id"],
-      "price": value,
-      "mercado_pago_id": "123456", # temporário
-    }
-
-    response_payment = await new_payment(payment_data)
-    response_user = await update_client(data)
-
-    if response_payment.get("error"):
-      logging.error(response_payment.get("error"))
-
-    if response_user.get("error"):
-      await update.message.reply_text(
-          "Ocorreu um erro ao atualizar seu saldo. Por favor, tente novamente mais tarde."
+async def check_payment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    
+    payment = await get_payment(context.user_data["payment_id"], os.getenv("ACCESS_TOKEN"))
+    if payment.get("error"):
+      await query.edit_message_text(
+          "Ocorreu um erro ao verificar o pagamento, clique para tentar novamente.",
+          reply_markup=reply_keyboard_payment_done,
       )
-      return ConversationHandler.END
+      return CHECK_PAYMENT
+    
+    if payment["status"] == "approved":
+      value = payment["value"]
+      data = {
+        "email": context.user_data["email"],
+        "balance": context.user_data["balance"] + float(value)
+      }
+      payment_data = {
+        "client_id": context.user_data["client_id"],
+        "price": value,
+        "mercado_pago_id": payment["id"],
+      }
 
-    context.user_data["balance"] += float(value)
-    await update.message.reply_text(
-        f"Saldo atualizado com sucesso! Seu novo saldo é de {context.user_data['balance']}R$.",
-        reply_markup=reply_keyboard_return,
-    )
-    return SHOW_MENU
+      response_payment = await new_payment(payment_data)
+      response_user = await update_client(data)
 
+      if response_payment.get("error"):
+        logging.error(response_payment.get("error"))
+
+      if response_user.get("error"):
+        await query.edit_message_text(
+            "Ocorreu um erro ao atualizar seu saldo. Por favor, entre em contato com o suporte."
+        )
+        return ConversationHandler.END
+
+      context.user_data["balance"] += float(value)
+      await query.edit_message_text(
+          f"Saldo atualizado com sucesso! Seu novo saldo é de {context.user_data['balance']}R$.",
+          reply_markup=reply_keyboard_return,
+      )
+      return SHOW_MENU
+    
+    else:
+      await query.edit_message_text(
+          "Pagamento ainda não aprovado. Clique novamente para verificar.",
+          reply_markup=reply_keyboard_payment_done,
+      )
+      return CHECK_PAYMENT
+    
 async def value(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
@@ -807,6 +838,8 @@ def main() -> None:
             CONFIRM_VALUE: [CallbackQueryHandler(confirm_value, pattern="^(Sim|Não)$")],
             START_QUIZ: [CallbackQueryHandler(start_quiz, pattern="^(A|B|C|D)")],
             CHECK_ANSWER: [CallbackQueryHandler(check_answer)],
+            CHECK_PAYMENT: [CallbackQueryHandler(check_payment, pattern="^(Verificar)$"), 
+                            CallbackQueryHandler(cancel_query, pattern="^(Cancelar)$")],
         },
         fallbacks=[CommandHandler("cancel", cancel), CommandHandler("start", start)],
     )

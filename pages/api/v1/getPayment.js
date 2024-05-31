@@ -19,7 +19,9 @@ async function getPayment(req, res) {
       id: paymentId,
       requestOptions: requestOptions,
     });
-    res.status(200).json({ status: response.status });
+    res
+      .status(200)
+      .json({ status: response.status, value: response.transaction_amount });
   } catch (error) {
     console.log(error);
     res.status(500).json({ error: error.message });
