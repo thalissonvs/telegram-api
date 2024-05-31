@@ -210,7 +210,7 @@ const ClientsPage = () => {
                       <div className="col-12 col-sm-auto">
                         <button
                           className="btn btn-outline-primary my-1 btn-sm"
-                          onClick={() => handleShowAwards(index)}
+                          onClick={() => handleShowAwards(client.id)}
                         >
                           Prêmios
                         </button>
@@ -218,7 +218,7 @@ const ClientsPage = () => {
                       <div className="col-12 col-sm-auto">
                         <button
                           className="btn btn-outline-primary my-1 btn-sm"
-                          onClick={() => handleShowInvestments(index)}
+                          onClick={() => handleShowInvestments(client.id)}
                         >
                           Investimentos
                         </button>
