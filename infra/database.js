@@ -172,6 +172,7 @@ async function createTablePrizes() {
       client_id INTEGER NOT NULL,
       price FLOAT NOT NULL,
       status INTEGER NOT NULL,
+      date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (client_id) REFERENCES clients(id)
     )
   `;

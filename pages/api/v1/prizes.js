@@ -27,7 +27,7 @@ async function getPrizes(req, res) {
   const client_id = req.query.client_id;
 
   const getPrizesQuery = `
-    SELECT id, client_id, price, status
+    SELECT id, client_id, price, status, date
     FROM prizes
     WHERE client_id = ${client_id};
   `;

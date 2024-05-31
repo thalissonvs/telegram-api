@@ -410,13 +410,48 @@ async def show_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     )
     return OPTION
 
-async def show_payments(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def verify_balance_option(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text(
+        f"Seu saldo é de {context.user_data['balance']}R$.",
+        reply_markup=reply_keyboard_return,
+    )
+    return SHOW_MENU
+
+async def start_quiz_option(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text(
+        "Ótimo! Selecione um valor para investir.",
+        reply_markup=reply_keyboard_values,
+    )
+    return VALUE
+
+async def change_pix_option(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text(
+        "Tudo bem! Selecione um novo tipo de chave PIX.",
+        reply_markup=reply_keyboard_pix_type,
+    )
+    return PIX_TYPE
+
+async def add_balance_option(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text(
+        "Ótimo! Insira abaixo o valor que deseja adicionar ao seu saldo (apenas números inteiros).",
+    )
+    return ADD_BALANCE
+
+async def show_payments_option(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
     client_id = context.user_data["client_id"]
     response = await get_payments(client_id)
 
-    if response.get("error"):
+    if type(response) == dict and response.get("error"):
       await query.edit_message_text(
           "Ocorreu um erro ao buscar seus pagamentos. Por favor, tente novamente mais tarde.",
           reply_markup=reply_keyboard_return,
@@ -432,60 +467,54 @@ async def show_payments(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
     payments = []
     for payment in response:
-      value = f"{payment["value"]}R$"
-      date_timestamp = payment["date"]
-      date = datetime.fromtimestamp(date_timestamp).strftime("%d/%m/%Y %H:%M:%S")
+      value = f"{payment['price']}R$"
+      date = datetime.strptime(payment["date"], "%Y-%m-%dT%H:%M:%S.%fZ").strftime("%d/%m/%Y %H:%M")
       payments.append(f"{value} - {date}")
     
     payments_string = "\n".join(payments)
     
     await query.edit_message_text(
-        f"Seus últimos pagamentos:\n{payments_string}",
+        f"Aqui estão seus últimos pagamentos:\n\n{payments_string}",
         reply_markup=reply_keyboard_return,
     )
     return SHOW_MENU
 
-async def option(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def show_prizes_option(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
-    selected_option = query.data
+    client_id = context.user_data["client_id"]
+    response = await get_prizes(client_id)
 
-    if selected_option == "Verificar saldo":
-        await query.edit_message_text(
-            f"Seu saldo é de {context.user_data['balance']}R$.",
-            reply_markup=reply_keyboard_return,
-        )
-        return SHOW_MENU
-    
-    elif selected_option == "Cancelar":
-        await query.edit_message_text(
-            "Até mais! basta digitar /start para iniciar novamente.",
-        )
-        return ConversationHandler.END
-    
-    elif selected_option == "Iniciar quiz":
+    if type(response) == dict and response.get("error"):
       await query.edit_message_text(
-          "Ótimo! Selecione um valor para investir.",
-          reply_markup=reply_keyboard_values,
+          "Ocorreu um erro ao buscar seus prêmios. Por favor, tente novamente mais tarde.",
+          reply_markup=reply_keyboard_return,
       )
-      return VALUE
-    
-    elif selected_option == "Mudar chave PIX":
+      return SHOW_MENU
+
+    if not response:
       await query.edit_message_text(
-          "Tudo bem! Selecione um novo tipo de chave PIX.",
-          reply_markup=reply_keyboard_pix_type,
+          "Você não possui prêmios registrados.",
+          reply_markup=reply_keyboard_return,
       )
-      return PIX_TYPE
+      return SHOW_MENU
+
+    prizes = []
+    for prize in response:
+      value = f"{prize['price']}R$"
+      date = datetime.strptime(prize["date"], "%Y-%m-%dT%H:%M:%S.%fZ").strftime("%d/%m/%Y %H:%M")
+      paid = "Sim" if prize["status"] == 1 else "Não"
+      prizes.append(f"{value} - {date} | Pago: {paid}")
     
-    elif selected_option == "Recarregar saldo":
-      await query.edit_message_text(
-          "Ótimo! Insira abaixo o valor que deseja adicionar ao seu saldo (apenas números inteiros).",
-      )
-      return ADD_BALANCE
+    prizes_string = "\n".join(prizes)
     
-    elif selected_option == "Últimos pagamentos":
-      return await show_payments(update, context)
-  
+    await query.edit_message_text(
+        f"Aqui estão seus prêmios:\n\n{prizes_string}",
+        reply_markup=reply_keyboard_return,
+    )
+    return SHOW_MENU
+
+
 async def add_balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     value = update.message.text.strip()
 
@@ -502,7 +531,7 @@ async def add_balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     }
     payment_data = {
       "client_id": context.user_data["client_id"],
-      "value": value,
+      "price": value,
       "mercado_pago_id": "123456", # temporário
     }
 
@@ -654,6 +683,13 @@ async def check_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
       f"Parabéns, você ganhou! Seu prêmio é de {context.user_data['selected_value'] * 2}R$ e será creditado em breve.",
       reply_markup=reply_keyboard_return,
     )
+    prize_data = {
+      "client_id": context.user_data["client_id"],
+      "price": context.user_data["selected_value"] * 2,
+      "status": 0,
+    }
+    await new_prize(prize_data)
+
     return SHOW_MENU
   else:
     await query.edit_message_text(
@@ -693,7 +729,13 @@ def main() -> None:
             PIX_TYPE: [CallbackQueryHandler(pix_type, pattern="^(CPF|CNPJ|Chave aleatória|Email|Telefone|Cancelar)$")],
             PIX: [CallbackQueryHandler(show_pix_type_menu, pattern="^(Mudar tipo de chave)$"), MessageHandler(filters.TEXT, pix)],
             CONFIRM_PIX: [CallbackQueryHandler(confirm_pix, pattern="^(Sim|Não)$")],
-            OPTION: [CallbackQueryHandler(option, pattern="^(Verificar saldo|Recarregar saldo|Iniciar quiz|Cancelar|Retornar ao menu|Mudar chave PIX)$")],
+            OPTION: [CallbackQueryHandler(start_quiz_option, pattern="^(Iniciar quiz)$"), 
+                     CallbackQueryHandler(add_balance_option, pattern="^(Recarregar saldo)$"), 
+                     CallbackQueryHandler(verify_balance_option, pattern="^(Verificar saldo)$"), 
+                     CallbackQueryHandler(change_pix_option, pattern="^(Mudar chave PIX)$"), 
+                     CallbackQueryHandler(show_payments_option, pattern="^(Últimos pagamentos)$"),
+                     CallbackQueryHandler(show_prizes_option, pattern="^(Meus prêmios)$"),
+                     CallbackQueryHandler(cancel, pattern="^(Cancelar)$")]  ,
             ADD_BALANCE: [MessageHandler(filters.TEXT, add_balance)],
             SHOW_MENU: [CallbackQueryHandler(show_menu, pattern="^(Retornar ao menu)$")],
             VALUE: [CallbackQueryHandler(value, pattern="^(1R\$|5R\$|10R\$|100R\$|1000R\$|Cancelar)$")],
