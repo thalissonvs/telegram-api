@@ -7,6 +7,10 @@ import time
 import re
 import requests
 from datetime import datetime
+from dotenv import load_dotenv
+import base64
+from PIL import Image
+from io import BytesIO
 
 
 from telegram.ext import JobQueue, CallbackContext
@@ -20,6 +24,8 @@ from telegram.ext import (
     CallbackQueryHandler,
     filters,
 )
+
+load_dotenv("../.env.development")
 
 # Enable logging
 logging.basicConfig(
@@ -154,6 +160,17 @@ async def get_prizes(client_id: int) -> dict:
   url = f"https://quizmy.site/api/v1/prizes/?client_id={client_id}"
   response = await fetch(url)
   return response
+
+async def generate_payment(data: dict) -> dict:
+  url = "https://quizmy.site/api/v1/generatePayment/"
+  response = await post(url, data)
+  return response
+
+async def decode_base64_image(base64_string: str) -> BytesIO:
+  image = Image.open(BytesIO(base64.b64decode(base64_string)))
+  image_io = BytesIO()
+  image.save(image_io, format="PNG")
+  return image_io
 
 def validate_cpf(cpf: str) -> bool:
   # Remove any non-numeric characters
@@ -524,7 +541,41 @@ async def add_balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         )
         return ADD_BALANCE
 
-    # TODO: sistema de pagamento
+    data = {
+       "price": value,
+       "email": context.user_data["email"],
+       "accessToken": os.getenv("ACCESS_TOKEN")
+    }
+
+    response = await generate_payment(data)
+    if response.get("error"):
+      await update.message.reply_text(
+          "Ocorreu um erro ao gerar o pagamento. Por favor, tente novamente mais tarde.",
+          reply_markup=reply_keyboard_return,
+      )
+      return SHOW_MENU
+    
+    qr_code_base64 = response["qr_code_base64"]
+    qr_code_image = await decode_base64_image(qr_code_base64)
+    qr_code = response["qr_code"]
+
+    await update.message.reply_photo(
+        photo=qr_code_image,
+        caption=f"Escaneie o QR Code abaixo para efetuar o pagamento de {value}R$.",
+    )
+
+    await update.message.reply_text(
+       qr_code
+    )
+
+    await update.message.reply_text(
+        "Após efetuar o pagamento, clique no botão abaixo para verificar se o saldo foi atualizado.",
+        reply_markup=reply_keyboard_return,
+    )
+
+    return SHOW_MENU
+
+
     data = {
       "email": context.user_data["email"],
       "balance": context.user_data["balance"] + float(value)
@@ -715,7 +766,15 @@ async def timeout_callback(context: CallbackContext):
       "Tempo esgotado! Você não respondeu a tempo.",
       reply_markup=reply_keyboard_return,
     )
-  
+
+async def cancel_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text(
+        "Até mais!"
+    )
+    return ConversationHandler.END
+
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Cancela a conversa e finaliza o bot"""
     await update.message.reply_text(
@@ -741,7 +800,7 @@ def main() -> None:
                      CallbackQueryHandler(change_pix_option, pattern="^(Mudar chave PIX)$"), 
                      CallbackQueryHandler(show_balance_history_option, pattern="^(Histórico de saldo)$"),
                      CallbackQueryHandler(show_prizes_option, pattern="^(Meus prêmios)$"),
-                     CallbackQueryHandler(cancel, pattern="^(Cancelar)$")]  ,
+                     CallbackQueryHandler(cancel_query, pattern="^(Cancelar)$")]  ,
             ADD_BALANCE: [MessageHandler(filters.TEXT, add_balance)],
             SHOW_MENU: [CallbackQueryHandler(show_menu, pattern="^(Retornar ao menu)$")],
             VALUE: [CallbackQueryHandler(value, pattern="^(1R\$|5R\$|10R\$|100R\$|1000R\$|Cancelar)$")],
