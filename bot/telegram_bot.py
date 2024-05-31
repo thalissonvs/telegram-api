@@ -38,7 +38,7 @@ reply_keyboard_menu = InlineKeyboardMarkup(
   [
     [InlineKeyboardButton("Iniciar quiz", callback_data="Iniciar quiz"), InlineKeyboardButton("Recarregar saldo", callback_data="Recarregar saldo")],
     [InlineKeyboardButton("Verificar saldo", callback_data="Verificar saldo"), InlineKeyboardButton("Mudar chave PIX", callback_data="Mudar chave PIX")],
-    [InlineKeyboardButton("Últimos pagamentos", callback_data="Últimos pagamentos"), InlineKeyboardButton("Meus prêmios", callback_data="Meus prêmios")],
+    [InlineKeyboardButton("Histórico de saldo", callback_data="Histórico de saldo"), InlineKeyboardButton("Meus prêmios", callback_data="Meus prêmios")],
     [InlineKeyboardButton("Cancelar", callback_data="Cancelar")],
   ]
 )
@@ -445,7 +445,7 @@ async def add_balance_option(update: Update, context: ContextTypes.DEFAULT_TYPE)
     )
     return ADD_BALANCE
 
-async def show_payments_option(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def show_balance_history_option(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
     client_id = context.user_data["client_id"]
@@ -460,7 +460,7 @@ async def show_payments_option(update: Update, context: ContextTypes.DEFAULT_TYP
 
     if not response:
       await query.edit_message_text(
-          "Você não possui pagamentos registrados.",
+          "Você não possui histórico registrado.",
           reply_markup=reply_keyboard_return,
       )
       return SHOW_MENU
@@ -474,7 +474,7 @@ async def show_payments_option(update: Update, context: ContextTypes.DEFAULT_TYP
     payments_string = "\n".join(payments)
     
     await query.edit_message_text(
-        f"Aqui estão seus últimos pagamentos:\n\n{payments_string}",
+        f"Aqui estão os últimos registros do seu saldo:\n\n{payments_string}",
         reply_markup=reply_keyboard_return,
     )
     return SHOW_MENU
@@ -608,10 +608,16 @@ async def start_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
   await query.answer()
 
   context.user_data["balance"] -= context.user_data["selected_value"]
+  data_payment = {
+    "client_id": context.user_data["client_id"],
+    "price": context.user_data["selected_value"] * -1,
+    "mercado_pago_id": "123456", # temporário
+  }
   data = {
     "email": context.user_data["email"],
     "balance": context.user_data["balance"]
   }
+  await new_payment(data_payment)
   response = await update_client(data)
   
   if response.get("error"):
@@ -733,7 +739,7 @@ def main() -> None:
                      CallbackQueryHandler(add_balance_option, pattern="^(Recarregar saldo)$"), 
                      CallbackQueryHandler(verify_balance_option, pattern="^(Verificar saldo)$"), 
                      CallbackQueryHandler(change_pix_option, pattern="^(Mudar chave PIX)$"), 
-                     CallbackQueryHandler(show_payments_option, pattern="^(Últimos pagamentos)$"),
+                     CallbackQueryHandler(show_balance_history_option, pattern="^(Histórico de saldo)$"),
                      CallbackQueryHandler(show_prizes_option, pattern="^(Meus prêmios)$"),
                      CallbackQueryHandler(cancel, pattern="^(Cancelar)$")]  ,
             ADD_BALANCE: [MessageHandler(filters.TEXT, add_balance)],
