@@ -32,7 +32,7 @@ async function getPrizes(req, res) {
   }
 
   const getPrizesQuery = `
-    SELECT p.id, p.client_id, c.first_name, p.price, p.status
+    SELECT p.id, p.client_id, c.first_name, p.price, p.status, p.date
     FROM prizes p
     JOIN clients c ON p.client_id = c.id
     WHERE p.client_id = ${client_id};

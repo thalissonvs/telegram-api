@@ -16,6 +16,7 @@
     "bcryptjs": "^2.4.3",
     "bootstrap": "^5.3.3",
     "cookie": "^0.6.0",
+    "date-fns": "^3.6.0",
     "jsonwebtoken": "^9.0.2",
     "next": "^13.1.6",
     "pg": "^8.11.3",

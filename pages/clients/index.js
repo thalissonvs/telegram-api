@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
-import { useRouter } from "next/router";
+import { format } from "date-fns";
 
 const ClientsPage = () => {
   const [clients, setClients] = useState([]);
@@ -251,7 +251,9 @@ const ClientsPage = () => {
                   <td>{payment.client_id}</td>
                   <td>{payment.first_name}</td>
                   <td>{payment.price}</td>
-                  <td>{payment.date}</td>
+                  <td>
+                    {format(new Date(payment.date), "dd/MM/yyyy HH:mm:ss")}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -283,7 +285,7 @@ const ClientsPage = () => {
                   <td>{prize.client_id}</td>
                   <td>{prize.first_name}</td>
                   <td>{prize.price}</td>
-                  <td>{prize.date}</td>
+                  <td>{format(new Date(prize.date), "dd/MM/yyyy HH:mm:ss")}</td>
                   <td>{prize.status}</td>
                 </tr>
               ))}
@@ -315,7 +317,9 @@ const ClientsPage = () => {
                   <td>{investment.client_id}</td>
                   <td>{investment.first_name}</td>
                   <td>{investment.price}</td>
-                  <td>{investment.date}</td>
+                  <td>
+                    {format(new Date(investment.date), "dd/MM/yyyy HH:mm:ss")}
+                  </td>
                 </tr>
               ))}
             </tbody>
