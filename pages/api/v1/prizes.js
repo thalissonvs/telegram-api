@@ -26,10 +26,16 @@ async function prizes(req, res) {
 async function getPrizes(req, res) {
   const client_id = req.query.client_id;
 
+  // faz um join com a tabela de clientes para trazer o nome do cliente
+  if (!client_id) {
+    res.status(400).json({ error: "Missing client_id" });
+  }
+
   const getPrizesQuery = `
-    SELECT id, client_id, price, status, date
-    FROM prizes
-    WHERE client_id = ${client_id};
+    SELECT p.id, p.client_id, c.first_name, p.price, p.status
+    FROM prizes p
+    JOIN clients c ON p.client_id = c.id
+    WHERE p.client_id = ${client_id};
   `;
 
   const result = await database.query(getPrizesQuery);

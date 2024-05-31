@@ -249,7 +249,7 @@ const ClientsPage = () => {
               {payments.map((payment, index) => (
                 <tr key={index}>
                   <td>{payment.client_id}</td>
-                  <td>{payment.client.first_name}</td>
+                  <td>{payment.first_name}</td>
                   <td>{payment.price}</td>
                   <td>{payment.date}</td>
                 </tr>
@@ -271,6 +271,7 @@ const ClientsPage = () => {
             <thead>
               <tr>
                 <th>ID do cliente</th>
+                <th>Primeiro nome</th>
                 <th>Prêmio</th>
                 <th>Data</th>
                 <th>Status</th>
@@ -280,6 +281,7 @@ const ClientsPage = () => {
               {prizes.map((prize, index) => (
                 <tr key={index}>
                   <td>{prize.client_id}</td>
+                  <td>{prize.first_name}</td>
                   <td>{prize.price}</td>
                   <td>{prize.date}</td>
                   <td>{prize.status}</td>
@@ -302,14 +304,16 @@ const ClientsPage = () => {
             <thead>
               <tr>
                 <th>ID do cliente</th>
+                <th>Primeiro nome</th>
                 <th>Valor</th>
                 <th>Data</th>
               </tr>
             </thead>
             <tbody>
-              {prizes.map((investment, index) => (
+              {investments.map((investment, index) => (
                 <tr key={index}>
                   <td>{investment.client_id}</td>
+                  <td>{investment.first_name}</td>
                   <td>{investment.price}</td>
                   <td>{investment.date}</td>
                 </tr>
