@@ -22,7 +22,7 @@ async function quizzes(req, res) {
 }
 
 async function getQuizzes(req, res) {
-  difficulty = req.query.difficulty;
+  const difficulty = req.query.difficulty;
 
   const getQuizzesQuery = `
     SELECT q.id, q.question, q.difficulty, o.option_label, o.option_text, o.is_correct
