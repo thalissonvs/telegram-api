@@ -30,6 +30,7 @@ from telegram.ext import (
     ConversationHandler,
     MessageHandler,
     CallbackQueryHandler,
+    PicklePersistence,
     filters,
 )
 
@@ -387,6 +388,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data['chat_id'] = chat_id
     context.user_data['first_name'] = first_name
     context.user_data['correct_answers'] = 0
+    context.user_data['answered'] = False 
 
     if not user_data or user_data.get('error'):
         context.user_data['registered'] = False
@@ -806,6 +808,7 @@ async def check_payment(
             return ConversationHandler.END
 
         context.user_data['balance'] += float(value)
+        context.user_data['payment_id'] = None
         await query.edit_message_text(
             f"Saldo atualizado com sucesso! Seu novo saldo é de {context.user_data['balance']}R$.",
             reply_markup=reply_keyboard_return,
@@ -901,6 +904,17 @@ async def start_quiz(
     
     return await show_quiz(update, context)
 
+async def choose_quiz(difficulty: int, context: ContextTypes.DEFAULT_TYPE) -> dict:
+    quizzes = await get_quizzes(difficulty)
+    not_played_quizzes = list(set(quizzes) - set(context.user_data['played_quizzes']))
+    
+    if not_played_quizzes:
+        context.user_data['played_quizzes'] = [] # reset played quizzes
+        return random.choice(quizzes)
+    
+    return random.choice(not_played_quizzes)
+
+
 async def show_quiz(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> int:
@@ -930,22 +944,29 @@ async def show_quiz(
 
     context.user_data['correct_answer'] = chosen_quiz['correctOption']
     context.user_data['answered'] = False
-
+    
     await query.edit_message_text(
         f"{chosen_quiz['question']} Você tem 5 segundos para responder.",
         reply_markup=reply_keyboard_quiz,
     )
+    context.job_queue.run_once(
+        timeout_callback, TIME_TO_ANSWER_QUIZ, data={'context': context, 'query': query}
+    )
 
+    if 'played_quizzes' not in context.user_data:
+        context.user_data['played_quizzes'] = []
+
+    context.user_data['played_quizzes'].append(chosen_quiz['question'])
     return CHECK_ANSWER
 
-
+# TODO: ao clicar em cancelar na hora do pagamento, excluir o QR CODE
 async def check_answer(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> int:
 
     query = update.callback_query
     await query.answer()
-    context.user_data['answered'] = False
+    context.user_data['answered'] = True
 
     selected_answer = query.data
 
@@ -970,7 +991,7 @@ async def check_answer(
         else:
           for second in range(TIME_TO_START_QUIZ):
               await query.edit_message_text(
-                  f"Parabéns! Você acertou a resposta. Próxima pergunta em {TIME_TO_START_QUIZ - second} segundos ({context.user_data['answered']}/{QUIZZES_TO_WIN}).",
+                  f"Parabéns! Você acertou a resposta. Próxima pergunta em {TIME_TO_START_QUIZ - second} segundos ({context.user_data['correct_answers']}/{QUIZZES_TO_WIN}).",
               )
               await asyncio.sleep(1)
           return await show_quiz(update, context)
@@ -985,14 +1006,14 @@ async def check_answer(
 
 async def timeout_callback(context: CallbackContext):
     user_context: ContextTypes.DEFAULT_TYPE = context.job.data['context']
-    user_update: Update = context.job.data['update']
+    query: Update = context.job.data['query']
 
     await asyncio.sleep(0.2)
 
-    if not user_context.user_data.get('answered'):
-        context.user_data['correct_answers'] = 0
-        await user_update.callback_query.edit_message_text(
-            f'Que pena! O tempo acabou. Seu saldo perdido foi de {context.user_data["selected_value"]}R$.',
+    if user_context.user_data.get('answered') is False:
+        user_context.user_data['correct_answers'] = 0
+        await query.edit_message_text(
+            f'Que pena! O tempo acabou. Seu saldo perdido foi de {user_context.user_data["selected_value"]}R$.',
             reply_markup=reply_keyboard_return,
         )
 
@@ -1017,7 +1038,8 @@ def main() -> None:
         os.getenv('TELEGRAM_KEY')
         or '7164176762:AAHgcZ__UPWDC7xK5LrpbymUSvPFVe_edAg'
     )
-    application = Application.builder().token(token).build()
+    persistence = PicklePersistence(filepath='quizmybot')
+    application = Application.builder().token(token).persistence(persistence).build()
 
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler('start', start)],
@@ -1089,6 +1111,8 @@ def main() -> None:
             CommandHandler('cancel', cancel),
             CommandHandler('start', start),
         ],
+        name='quizmybot',
+        persistent=True,
     )
 
     application.add_handler(conv_handler)

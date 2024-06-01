@@ -107,6 +107,7 @@ function formatQuizzes(quizzes) {
       }
     } else {
       result.push({
+        id: quiz.id,
         question: quiz.question,
         [`option${quiz.option_label}`]: quiz.option_text,
         correctOption: quiz.is_correct ? quiz.option_label : null,
