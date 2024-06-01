@@ -8,8 +8,6 @@ async function prizes(req, res) {
   );
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
-  console.log(req.method);
-
   const methodsMap = {
     GET: getPrizes,
     POST: postPrize,
@@ -28,19 +26,26 @@ async function getPrizes(req, res) {
 
   // faz um join com a tabela de clientes para trazer o nome do cliente
   if (!client_id) {
-    res.status(400).json({ error: "Missing client_id" });
+    const getPrizesQuery = `
+      SELECT p.id, p.client_id, c.first_name, p.price, p.status, p.date, c.chat_id, c.pix_type, c.pix_key
+      FROM prizes p
+      JOIN clients c ON p.client_id = c.id;
+    `;
+    const result = await database.query(getPrizesQuery);
+    const prizes = result.rows;
+    res.status(200).json(prizes);
+  } else {
+    const getPrizesQuery = `
+      SELECT p.id, p.client_id, c.first_name, p.price, p.status, p.date, c.chat_id, c.pix_type, c.pix_key
+      FROM prizes p
+      JOIN clients c ON p.client_id = c.id
+      WHERE p.client_id = ${client_id};
+    `;
+
+    const result = await database.query(getPrizesQuery);
+    const prizes = result.rows;
+    res.status(200).json(prizes);
   }
-
-  const getPrizesQuery = `
-    SELECT p.id, p.client_id, c.first_name, p.price, p.status, p.date
-    FROM prizes p
-    JOIN clients c ON p.client_id = c.id
-    WHERE p.client_id = ${client_id};
-  `;
-
-  const result = await database.query(getPrizesQuery);
-  const prizes = result.rows;
-  res.status(200).json(prizes);
 }
 
 async function postPrize(req, res) {
