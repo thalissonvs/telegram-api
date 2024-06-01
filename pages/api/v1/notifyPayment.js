@@ -9,7 +9,7 @@ async function notifyPayment(req, res) {
     "Boas notícias! Seu prêmio no valor de R$ " +
     price +
     " foi pago com sucesso!";
-  key = process.env.TELEGRAM_KEY;
+  const key = process.env.TELEGRAM_KEY;
 
   const url = `https://api.telegram.org/bot${key}/sendMessage?chat_id=${chat_id}&text=${textToSend}`;
   await fetch(url);
