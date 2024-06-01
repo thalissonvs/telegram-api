@@ -13,6 +13,7 @@ from PIL import Image
 from io import BytesIO
 import mercadopago
 import uuid
+import random
 
 
 from telegram.ext import JobQueue, CallbackContext
@@ -63,6 +64,7 @@ logger = logging.getLogger(__name__)
 ) = range(15)
 TIME_TO_START_QUIZ = 5
 TIME_TO_ANSWER_QUIZ = 5
+QUIZZES_TO_WIN = 5
 
 reply_keyboard_menu = InlineKeyboardMarkup(
     [
@@ -252,6 +254,10 @@ async def get_prizes(client_id: int) -> dict:
     response = await fetch(url)
     return response
 
+async def get_quizzes(difficulty: int) -> dict:
+    url = f'https://quizmy.site/api/v1/quizzes/?difficulty={difficulty}'
+    response = await fetch(url)
+    return response
 
 async def generate_mp_payment(data: dict) -> dict:
     sdk = mercadopago.SDK(os.getenv('ACCESS_TOKEN'))
@@ -380,6 +386,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     context.user_data['chat_id'] = chat_id
     context.user_data['first_name'] = first_name
+    context.user_data['correct_answers'] = 0
 
     if not user_data or user_data.get('error'):
         context.user_data['registered'] = False
@@ -876,7 +883,7 @@ async def start_quiz(
     data_payment = {
         'client_id': context.user_data['client_id'],
         'price': context.user_data['selected_value'] * -1,
-        'mercado_pago_id': '123456',  # temporário
+        'mercado_pago_id': 'none',
     }
     data = {
         'email': context.user_data['email'],
@@ -891,70 +898,45 @@ async def start_quiz(
             reply_markup=reply_keyboard_return,
         )
         return SHOW_MENU
+    
+    return await show_quiz(update, context)
+
+async def show_quiz(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int:
+    query = update.callback_query
+    await query.answer()
+
+    price_to_diffilcuty_map = {
+        1: 1, 5: 2, 10: 3, 100: 3, 1000: 3,
+    }
+    difficulty = price_to_diffilcuty_map[context.user_data['selected_value']]
+    quizzes = await get_quizzes(difficulty)
+
+    chosen_quiz = random.choice(quizzes)
 
     reply_keyboard_quiz = InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton('França', callback_data='A'),
-                InlineKeyboardButton('Brasília', callback_data='B'),
+                InlineKeyboardButton(chosen_quiz["optionA"], callback_data='A'),
+                InlineKeyboardButton(chosen_quiz["optionB"], callback_data='B'),
             ],
             [
-                InlineKeyboardButton('Berlim', callback_data='C'),
-                InlineKeyboardButton('Tokyo', callback_data='D'),
+                InlineKeyboardButton(chosen_quiz["optionC"], callback_data='C'),
+                InlineKeyboardButton(chosen_quiz["optionD"], callback_data='D'),
             ],
         ]
     )
-    context.user_data['correct_answer'] = 'D'
+
+    context.user_data['correct_answer'] = chosen_quiz['correctOption']
     context.user_data['answered'] = False
 
-    # executa um timer para chamar o método timeout_callback após x segundos, sem thread
-    context.job_queue.run_once(
-        timeout_callback,
-        TIME_TO_ANSWER_QUIZ,
-        {'context': context, 'update': update},
-    )
-    context.job_queue.run_once(
-        edit_quiz_message,
-        0,
-        {
-            'query': query,
-            'question': 'Qual é a capital do Japão?',
-            'reply_markup': reply_keyboard_quiz,
-            'context': context,
-        },
+    await query.edit_message_text(
+        f"{chosen_quiz['question']} Você tem 5 segundos para responder.",
+        reply_markup=reply_keyboard_quiz,
     )
 
     return CHECK_ANSWER
-
-
-async def edit_quiz_message(context: CallbackContext) -> int:
-    query = context.job.data['query']
-    question = context.job.data['question']
-    reply_markup = context.job.data['reply_markup']
-    user_context = context.job.data['context']
-    initial_time = time.time()
-    time_passed_before = 0
-    time_passed = 0
-
-    await query.edit_message_text(
-        f'{question} Você tem 5 segundos para responder.',
-        reply_markup=reply_markup,
-    )
-
-    while time_passed < TIME_TO_ANSWER_QUIZ:
-        if user_context.user_data.get('answered'):
-            break
-
-        time_passed = int(time.time() - initial_time)
-
-        if time_passed != time_passed_before:
-            await query.edit_message_text(
-                f'{question} Você tem {TIME_TO_ANSWER_QUIZ - time_passed} segundos para responder.',
-                reply_markup=reply_markup,
-            )
-
-        await asyncio.sleep(0.1)
-        time_passed_before = time_passed
 
 
 async def check_answer(
@@ -963,31 +945,37 @@ async def check_answer(
 
     query = update.callback_query
     await query.answer()
+    context.user_data['answered'] = False
 
     selected_answer = query.data
 
     if selected_answer not in ['A', 'B', 'C', 'D']:
         return await show_menu(update, context)
 
-    context.user_data['answered'] = True
-    await asyncio.sleep(
-        0.2
-    )   # aguarda 0.2 segundos para garantir que o método edit_quiz_message não está sendo executado
-
     if selected_answer == context.user_data['correct_answer']:
-        await query.edit_message_text(
-            f"Parabéns, você ganhou! Seu prêmio é de {context.user_data['selected_value'] * 2}R$ e será creditado em breve.",
-            reply_markup=reply_keyboard_return,
-        )
-        prize_data = {
-            'client_id': context.user_data['client_id'],
-            'price': context.user_data['selected_value'] * 2,
-            'status': 0,
-        }
-        await new_prize(prize_data)
-
-        return SHOW_MENU
+        context.user_data['correct_answers'] += 1
+        if context.user_data['correct_answers'] == QUIZZES_TO_WIN:
+          context.user_data['correct_answers'] = 0
+          await query.edit_message_text(
+              f"Parabéns, você ganhou! Seu prêmio é de {context.user_data['selected_value'] * 2}R$ e será creditado em breve.",
+              reply_markup=reply_keyboard_return,
+          )
+          prize_data = {
+              'client_id': context.user_data['client_id'],
+              'price': context.user_data['selected_value'] * 2,
+              'status': 0,
+          }
+          await new_prize(prize_data)
+          return SHOW_MENU
+        else:
+          for second in range(TIME_TO_START_QUIZ):
+              await query.edit_message_text(
+                  f"Parabéns! Você acertou a resposta. Próxima pergunta em {TIME_TO_START_QUIZ - second} segundos ({context.user_data['answered']}/{QUIZZES_TO_WIN}).",
+              )
+              await asyncio.sleep(1)
+          return await show_quiz(update, context)
     else:
+        context.user_data['correct_answers'] = 0
         await query.edit_message_text(
             f"Que pena! Você errou a resposta. Seu saldo perdido foi de {context.user_data['selected_value']}R$.",
             reply_markup=reply_keyboard_return,
@@ -1002,8 +990,9 @@ async def timeout_callback(context: CallbackContext):
     await asyncio.sleep(0.2)
 
     if not user_context.user_data.get('answered'):
+        context.user_data['correct_answers'] = 0
         await user_update.callback_query.edit_message_text(
-            'Tempo esgotado! Você não respondeu a tempo.',
+            f'Que pena! O tempo acabou. Seu saldo perdido foi de {context.user_data["selected_value"]}R$.',
             reply_markup=reply_keyboard_return,
         )
 

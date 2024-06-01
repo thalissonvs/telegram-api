@@ -146,7 +146,7 @@ async function createTablePayments() {
       id SERIAL PRIMARY KEY,
       client_id INTEGER NOT NULL,
       price FLOAT NOT NULL,
-      mercado_pago_id VARCHAR(255) NOT NULL,
+      mercado_pago_id VARCHAR(255),
       date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (client_id) REFERENCES clients(id)
     )
