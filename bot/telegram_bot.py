@@ -7,7 +7,6 @@ import time
 import re
 import requests
 from datetime import datetime
-from dotenv import load_dotenv, find_dotenv
 import base64
 from PIL import Image
 from io import BytesIO
@@ -34,8 +33,6 @@ from telegram.ext import (
     filters,
 )
 
-load_dotenv(find_dotenv('.env.development'))
-print(os.getenv('ACCESS_TOKEN'))
 # Enable logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -54,7 +51,7 @@ logger = logging.getLogger(__name__)
     PIX,
     CONFIRM_PIX,
     OPTION,
-    ADD_BALANCE,
+    GET_BALANCE,
     VALUE,
     CONFIRM_VALUE,
     PAYMENTS,
@@ -66,6 +63,8 @@ logger = logging.getLogger(__name__)
 TIME_TO_START_QUIZ = 5
 TIME_TO_ANSWER_QUIZ = 5
 QUIZZES_TO_WIN = 5
+ACCESS_TOKEN = 'APP_USR-1178900652572281-071222-08a5b1fae9bb4b16813e9d610564e1f5-248670826'
+VALUES = [3.99, 5.99, 9.99, 99.99, 999.99]
 
 reply_keyboard_menu = InlineKeyboardMarkup(
     [
@@ -115,15 +114,15 @@ reply_keyboard_pix_type = InlineKeyboardMarkup(
 reply_keyboard_values = InlineKeyboardMarkup(
     [
         [
-            InlineKeyboardButton('1R$', callback_data='1R$'),
-            InlineKeyboardButton('5R$', callback_data='5R$'),
+            InlineKeyboardButton(f'{VALUES[0]}R$ ganha 100R$', callback_data=f'{VALUES[0]}R$'),
+            InlineKeyboardButton(f'{VALUES[1]}R$ ganha 500R$ ', callback_data=f'{VALUES[1]}R$'),
         ],
         [
-            InlineKeyboardButton('10R$', callback_data='10R$'),
-            InlineKeyboardButton('100R$', callback_data='100R$'),
+            InlineKeyboardButton(f'{VALUES[2]}R$ ganha 700R$', callback_data=f'{VALUES[2]}R$'),
+            InlineKeyboardButton(f'{VALUES[3]}R$ 100R$', callback_data=f'{VALUES[3]}R$'),
         ],
         [
-            InlineKeyboardButton('1000R$', callback_data='1000R$'),
+            InlineKeyboardButton(f'{VALUES[4]}R$ ganha 10000R$', callback_data=f'{VALUES[4]}R$'),
             InlineKeyboardButton('Cancelar', callback_data='Cancelar'),
         ],
     ]
@@ -261,7 +260,7 @@ async def get_quizzes(difficulty: int) -> dict:
     return response
 
 async def generate_mp_payment(data: dict) -> dict:
-    sdk = mercadopago.SDK(os.getenv('ACCESS_TOKEN'))
+    sdk = mercadopago.SDK(ACCESS_TOKEN)
     price = data['price']
     email = data['email']
 
@@ -294,7 +293,7 @@ async def generate_mp_payment(data: dict) -> dict:
 
 
 async def get_mp_payment(payment_id: int) -> dict:
-    sdk = mercadopago.SDK(os.getenv('ACCESS_TOKEN'))
+    sdk = mercadopago.SDK(ACCESS_TOKEN)
     response = sdk.payment().get(payment_id)
     payment = response['response']
     return {
@@ -393,7 +392,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if not user_data or user_data.get('error'):
         context.user_data['registered'] = False
         await update.message.reply_text(
-            f'Olá {first_name}! Bem vindo ao QuizzinBot! Vejo que é sua primeira vez aqui, poderia me informar seu email?'
+            f'Olá {first_name}! Bem vindo ao QuizzinBot! Vejo que é sua primeira vez aqui, poderia me informar seu email? Não se preocupe, não te enviaremos mensagem!'
         )
         return EMAIL
 
@@ -440,11 +439,34 @@ async def confirm_email(
     answer = query.data
 
     if answer == 'Sim':
-        await query.edit_message_text(
-            'Ótimo! Agora preciso que você me informe sua chave PIX para pagamentos, ok? Escolha o tipo abaixo:',
-            reply_markup=reply_keyboard_pix_type,
-        )
-        return PIX_TYPE
+        if not context.user_data['registered']:
+            await query.edit_message_text(
+                'Ótimo! Aguarde enquanto seu cadastro é feito...',
+            )
+            data = {
+                'chat_id': context.user_data['chat_id'],
+                'first_name': context.user_data['first_name'],
+                'email': context.user_data['email'],
+                'pix_type': '',
+                'pix_key': '',
+            }
+            response = await register_client(data)
+            if response.get('error'):
+                await query.edit_message_text(
+                    'Ocorreu um erro ao registrar seu cadastro. Por favor, tente novamente mais tarde.'
+                )
+                return ConversationHandler.END
+
+            await query.edit_message_text(
+                'Cadastro realizado com sucesso! Lembre-se de cadastrar sua chave PIX mais tarde na opção "Mudar chave PIX". Vamos começar?',
+                reply_markup=reply_keyboard_menu,
+            )
+            context.user_data['registered'] = True
+            context.user_data['client_id'] = response['id']
+            context.user_data['balance'] = 0
+            return OPTION
+        
+      
     else:
         await query.edit_message_text(
             'Por favor, me informe seu email novamente.'
@@ -580,6 +602,16 @@ async def confirm_pix(
 async def show_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
+
+    context.user_data['start_directly'] = False
+
+    if context.user_data.get('photo_message_id', None):
+        await context.bot.delete_message(
+            chat_id=query.message.chat_id,
+            message_id=context.user_data['photo_message_id'],
+        )
+        context.user_data['photo_message_id'] = None
+
     await query.edit_message_text(
         'Selecione uma opção no menu abaixo.',
         reply_markup=reply_keyboard_menu,
@@ -631,7 +663,7 @@ async def add_balance_option(
     await query.edit_message_text(
         'Ótimo! Insira abaixo o valor que deseja adicionar ao seu saldo (apenas números inteiros).',
     )
-    return ADD_BALANCE
+    return GET_BALANCE
 
 
 async def show_balance_history_option(
@@ -713,7 +745,7 @@ async def show_prizes_option(
     return SHOW_MENU
 
 
-async def add_balance(
+async def get_balance(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> int:
     value = update.message.text.strip()
@@ -722,12 +754,19 @@ async def add_balance(
         await update.message.reply_text(
             'Por favor, me informe um valor válido (apenas números inteiros).'
         )
-        return ADD_BALANCE
+        return GET_BALANCE
 
+    value = int(value)
+    return await add_balance(update, context, value)
+
+async def add_balance(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, value: int
+) -> int:
+    
     data = {
         'price': value,
         'email': context.user_data['email'],
-        'accessToken': os.getenv('ACCESS_TOKEN'),
+        'accessToken': ACCESS_TOKEN,
     }
 
     response = await generate_mp_payment(data)
@@ -747,19 +786,19 @@ async def add_balance(
         'payment_id'
     ] = payment_id   # usado para verificar o pagamento posteriormente
 
-    photo_message = await update.message.reply_photo(
-        InputFile(qr_code_image, filename='qr_code.png'), caption=qr_code
+    photo_message = await context.bot.send_photo(
+        chat_id=context.user_data['chat_id'], photo=InputFile(qr_code_image, filename='qr_code.png'), caption=qr_code
     )
 
     context.user_data['photo_message_id'] = photo_message.message_id
 
-    await update.message.reply_text(
-        'Após efetuar o pagamento, clique no botão abaixo para verificar se o saldo foi atualizado.',
+    await context.bot.send_message(
+        chat_id=context.user_data['chat_id'],
+        text='Após efetuar o pagamento, clique no botão abaixo para verificar se o saldo foi atualizado.',
         reply_markup=reply_keyboard_payment_done,
     )
 
     return CHECK_PAYMENT
-
 
 async def check_payment(
     update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -783,6 +822,7 @@ async def check_payment(
             chat_id=query.message.chat_id,
             message_id=context.user_data['photo_message_id'],
         )
+        context.user_data['photo_message_id'] = None
 
         value = payment['value']
         data = {
@@ -809,6 +849,16 @@ async def check_payment(
 
         context.user_data['balance'] += float(value)
         context.user_data['payment_id'] = None
+
+        if context.user_data.get('start_directly'):
+            context.user_data['start_directly'] = False
+            for second in range(TIME_TO_START_QUIZ):
+                await query.edit_message_text(
+                    f'Você está pronto? O quiz iniciará em {TIME_TO_START_QUIZ - second} segundos.'
+                )
+                await asyncio.sleep(1)
+            return await start_quiz(update, context)
+        
         await query.edit_message_text(
             f"Saldo atualizado com sucesso! Seu novo saldo é de {context.user_data['balance']}R$.",
             reply_markup=reply_keyboard_return,
@@ -838,7 +888,7 @@ async def value(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data['selected_value'] = float(selected_value.split('R$')[0])
 
     await query.edit_message_text(
-        f'Você escolheu apostar {selected_value}. Está correto?',
+        f'Você escolheu investir {selected_value}. Está correto?',
         reply_markup=reply_keyboard_confirm,
     )
     return CONFIRM_VALUE
@@ -863,14 +913,14 @@ async def confirm_value(
 
         else:
             await query.edit_message_text(
-                'Você não possui saldo suficiente, recarregue no menu principal.',
-                reply_markup=reply_keyboard_return,
+                'Você não possui saldo suficiente, faça o pagamento com o QR Code abaixo.',
             )
-            return SHOW_MENU
+            context.user_data['start_directly'] = True
+            return await add_balance(update, context, context.user_data['selected_value'])
 
     else:
         await query.edit_message_text(
-            'Tudo certo! Basta escolher um novo valor para apostar.',
+            'Tudo certo! Basta escolher um novo valor para investir.',
             reply_markup=reply_keyboard_values,
         )
         return VALUE
@@ -906,12 +956,11 @@ async def start_quiz(
 
 async def choose_quiz(difficulty: int, context: ContextTypes.DEFAULT_TYPE) -> dict:
     quizzes = await get_quizzes(difficulty)
-    not_played_quizzes = list(set(quizzes) - set(context.user_data['played_quizzes']))
-    
-    if not_played_quizzes:
-        context.user_data['played_quizzes'] = [] # reset played quizzes
+    not_played_quizzes = [quiz for quiz in quizzes if quiz['id'] not in context.user_data['played_quizzes']]
+
+    if not not_played_quizzes:
+        context.user_data['played_quizzes'] = []
         return random.choice(quizzes)
-    
     return random.choice(not_played_quizzes)
 
 
@@ -921,13 +970,14 @@ async def show_quiz(
     query = update.callback_query
     await query.answer()
 
+    if 'played_quizzes' not in context.user_data:
+        context.user_data['played_quizzes'] = []
+
     price_to_diffilcuty_map = {
-        1: 1, 5: 2, 10: 3, 100: 3, 1000: 3,
+      VALUES[0]: 1, VALUES[1]: 2, VALUES[2]: 3, VALUES[3]: 3, VALUES[4]: 3,
     }
     difficulty = price_to_diffilcuty_map[context.user_data['selected_value']]
-    quizzes = await get_quizzes(difficulty)
-
-    chosen_quiz = random.choice(quizzes)
+    chosen_quiz = await choose_quiz(difficulty, context)
 
     reply_keyboard_quiz = InlineKeyboardMarkup(
         [
@@ -953,10 +1003,7 @@ async def show_quiz(
         timeout_callback, TIME_TO_ANSWER_QUIZ, data={'context': context, 'query': query}
     )
 
-    if 'played_quizzes' not in context.user_data:
-        context.user_data['played_quizzes'] = []
-
-    context.user_data['played_quizzes'].append(chosen_quiz['question'])
+    context.user_data['played_quizzes'].append(chosen_quiz['id'])
     return CHECK_ANSWER
 
 # TODO: ao clicar em cancelar na hora do pagamento, excluir o QR CODE
@@ -977,17 +1024,39 @@ async def check_answer(
         context.user_data['correct_answers'] += 1
         if context.user_data['correct_answers'] == QUIZZES_TO_WIN:
           context.user_data['correct_answers'] = 0
-          await query.edit_message_text(
-              f"Parabéns, você ganhou! Seu prêmio é de {context.user_data['selected_value'] * 2}R$ e será creditado em breve.",
-              reply_markup=reply_keyboard_return,
-          )
-          prize_data = {
-              'client_id': context.user_data['client_id'],
-              'price': context.user_data['selected_value'] * 2,
-              'status': 0,
+
+          user_data = await get_user_data(context.user_data['chat_id'])
+          prizes_map = {
+            VALUES[0]: 100, VALUES[1]: 500, VALUES[2]: 700, VALUES[3]: 1000, VALUES[4]: 10000,
           }
-          await new_prize(prize_data)
-          return SHOW_MENU
+          prize_value = prizes_map[context.user_data['selected_value']]
+
+          if user_data.get('pix', '') == '':
+
+              await query.edit_message_text(
+                  f'Você ganhou {prize_value}! Seu prêmio será creditado em breve. Selecione o tipo de chave PIX que deseja cadastrar.',
+                  reply_markup=reply_keyboard_pix_type,
+              )
+              
+              prize_data = {
+                  'client_id': context.user_data['client_id'],
+                  'price': prize_value,
+                  'status': 0,
+              }
+              await new_prize(prize_data)
+              return PIX_TYPE
+          else:
+            await query.edit_message_text(
+                f"Parabéns, você ganhou! Seu prêmio é de {prize_value}R$ e será creditado em breve.",
+                reply_markup=reply_keyboard_return,
+            )
+            prize_data = {
+                'client_id': context.user_data['client_id'],
+                'price': prize_value,
+                'status': 0,
+            }
+            await new_prize(prize_data)
+            return SHOW_MENU
         else:
           for second in range(TIME_TO_START_QUIZ):
               await query.edit_message_text(
@@ -1023,7 +1092,15 @@ async def cancel_query(
 ) -> int:
     query = update.callback_query
     await query.answer()
-    await query.edit_message_text('Até mais!')
+
+    if context.user_data.get('photo_message_id', None):
+        await context.bot.delete_message(
+            chat_id=query.message.chat_id,
+            message_id=context.user_data['photo_message_id'],
+        )
+        context.user_data['photo_message_id'] = None
+
+    await query.edit_message_text('Até mais! Digite /start para reiniciar o bot.')
     return ConversationHandler.END
 
 
@@ -1085,14 +1162,14 @@ def main() -> None:
                 ),
                 CallbackQueryHandler(cancel_query, pattern='^(Cancelar)$'),
             ],
-            ADD_BALANCE: [MessageHandler(filters.TEXT, add_balance)],
+            GET_BALANCE: [MessageHandler(filters.TEXT, get_balance)],
             SHOW_MENU: [
                 CallbackQueryHandler(show_menu, pattern='^(Retornar ao menu)$')
             ],
             VALUE: [
                 CallbackQueryHandler(
                     value,
-                    pattern='^(1R\$|5R\$|10R\$|100R\$|1000R\$|Cancelar)$',
+                    pattern=f'^({VALUES[0]}R\$|{VALUES[1]}R\$|{VALUES[2]}R\$|{VALUES[3]}R\$|{VALUES[4]}R\$|Cancelar)$',
                 )
             ],
             CONFIRM_VALUE: [

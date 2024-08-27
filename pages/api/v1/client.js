@@ -60,7 +60,7 @@ async function postClient(req, res) {
   const balance = 0;
 
   // valida se os dados não são nulos
-  if (!first_name || !email || !chat_id || !pix_type || !pix_key) {
+  if (!first_name || !email || !chat_id) {
     res.status(400).json({ error: "Missing fields" });
     return;
   }
@@ -75,12 +75,6 @@ async function postClient(req, res) {
 
   if (clientExists) {
     res.status(400).json({ error: "Client already exists" });
-    return;
-  }
-
-  const validTypes = ["CPF", "CNPJ", "Chave aleatória", "Email", "Telefone"];
-  if (!validTypes.includes(pix_type)) {
-    res.status(400).json({ error: "Invalid pix_type" });
     return;
   }
 
